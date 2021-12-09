@@ -5,11 +5,12 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         mc:Ignorable="d" d:DesignWidth="300" d:DesignHeight="450"
         x:Class="Skat.KawkaProject.UI.Views.MainWindow"
+        Width="520" Height="450"
         Icon="/Assets/avalonia-logo.ico"
         Title="Skat.KawkaProject.UI">
 
     <Design.DataContext>
-        <vm:MainWindowViewModel />
+        <vm:SendMessageViewModel />
     </Design.DataContext>
     <StackPanel Orientation="Vertical" Margin="10,10,10,10">
         <StackPanel Margin="0,0,0,20">

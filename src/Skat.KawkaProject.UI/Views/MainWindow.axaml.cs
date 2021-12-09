@@ -27,7 +27,7 @@ namespace Skat.KawkaProject.UI.Views
 
         public void SendMessageButton_OnClick(object sender, RoutedEventArgs e)
         {
-            var vm = (MainWindowViewModel) this.DataContext;
+            var vm = (SendMessageViewModel) this.DataContext;
             try
             {
                 var s = $"{vm.Message} - {vm.KafkaServer} - {vm.TopicName}";
@@ -43,6 +43,7 @@ namespace Skat.KawkaProject.UI.Views
                 using (var producer = new ProducerBuilder<Null, string>(config).Build())
                 {
                     producer.ProduceAsync(vm.TopicName, new Message<Null, string>() {Value = vm.Message}).Wait();
+                    producer.Flush();
                 }
 
                 vm.ReturnMessage = "Mensagem enviada";

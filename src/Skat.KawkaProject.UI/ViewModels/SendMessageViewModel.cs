@@ -4,7 +4,7 @@ using System.Text;
 
 namespace Skat.KawkaProject.UI.ViewModels
 {
-    public class MainWindowViewModel : ViewModelBase
+    public class SendMessageViewModel : ViewModelBase
     {
         public string KafkaServer { get; set; }
         public string TopicName { get; set; }
