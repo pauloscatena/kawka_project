@@ -1,0 +1,57 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Skat.KawkaProject.Features.Messages.ViewModels"
+             x:Class="Skat.KawkaProject.Features.Messages.Views.MessagesView"
+             x:DataType="vm:MessagesViewModel">
+    <DockPanel>
+        <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Spacing="8" Margin="8">
+            <TextBox Text="{Binding TopicName}" Watermark="Topic name" Width="180" />
+            <ComboBox ItemsSource="{Binding Modes}" SelectedItem="{Binding Mode}" />
+            <StackPanel Orientation="Horizontal" Spacing="4" IsVisible="{Binding IsOffsetMode}">
+                <TextBlock VerticalAlignment="Center">Partition:</TextBlock>
+                <NumericUpDown Value="{Binding Partition}" Minimum="0" Width="70" />
+                <TextBlock VerticalAlignment="Center">From offset:</TextBlock>
+                <NumericUpDown Value="{Binding StartOffset}" Minimum="0" Width="90" />
+                <TextBlock VerticalAlignment="Center">Count:</TextBlock>
+                <NumericUpDown Value="{Binding FetchCount}" Minimum="1" Maximum="1000" Width="70" />
+                <Button Command="{Binding FetchCommand}">Fetch</Button>
+            </StackPanel>
+            <StackPanel Orientation="Horizontal" Spacing="4" IsVisible="{Binding IsTailMode}">
+                <Button Command="{Binding StartTailCommand}">Tail</Button>
+                <Button Command="{Binding PauseCommand}">Pause</Button>
+                <Button Command="{Binding StopTailCommand}">Stop</Button>
+            </StackPanel>
+            <TextBox Text="{Binding ClientFilter}" Watermark="Filter loaded..." Width="160" />
+        </StackPanel>
+
+        <Border DockPanel.Dock="Top" Background="#FFDDDD" Padding="8"
+                IsVisible="{Binding ErrorMessage, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
+            <Grid ColumnDefinitions="*,Auto">
+                <TextBlock Grid.Column="0" Text="{Binding ErrorMessage}" Foreground="DarkRed" TextWrapping="Wrap" />
+                <Button Grid.Column="1" Command="{Binding DismissErrorCommand}" Padding="4,0">✕</Button>
+            </Grid>
+        </Border>
+        <ProgressBar DockPanel.Dock="Top" IsIndeterminate="True" IsVisible="{Binding IsBusy}" Height="4" />
+
+        <Grid RowDefinitions="*,200">
+            <ListBox Grid.Row="0" ItemsSource="{Binding FilteredMessages}"
+                     SelectedItem="{Binding SelectedMessage}">
+                <ListBox.ItemTemplate>
+                    <DataTemplate>
+                        <Grid ColumnDefinitions="60,60,140,*">
+                            <TextBlock Grid.Column="0" Text="{Binding Partition}" />
+                            <TextBlock Grid.Column="1" Text="{Binding Offset}" />
+                            <TextBlock Grid.Column="2" Text="{Binding Timestamp, StringFormat='{}{0:HH:mm:ss.fff}'}" />
+                            <TextBlock Grid.Column="3" Text="{Binding Value}" TextTrimming="CharacterEllipsis" />
+                        </Grid>
+                    </DataTemplate>
+                </ListBox.ItemTemplate>
+            </ListBox>
+            <Border Grid.Row="1" Padding="8" BorderBrush="#CCCCCC" BorderThickness="0,1,0,0">
+                <ScrollViewer>
+                    <TextBlock Text="{Binding SelectedMessageValue}" TextWrapping="Wrap" FontFamily="Monospace" />
+                </ScrollViewer>
+            </Border>
+        </Grid>
+    </DockPanel>
+</UserControl>
