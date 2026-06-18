@@ -19,5 +19,6 @@
     </ItemGroup>
     <ItemGroup>
         <ProjectReference Include="..\Skat.KawkaProject.Kafka\Skat.KawkaProject.Kafka.csproj" />
+        <ProjectReference Include="..\Skat.KawkaProject.Features.Connections\Skat.KawkaProject.Features.Connections.csproj" />
     </ItemGroup>
 </Project>

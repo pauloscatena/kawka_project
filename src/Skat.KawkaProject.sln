@@ -10,6 +10,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Skat.KawkaProject.Core.Test
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Skat.KawkaProject.Kafka.Tests", "Skat.KawkaProject.Kafka.Tests\Skat.KawkaProject.Kafka.Tests.csproj", "{D639A861-52A0-4E71-8976-3DC02AFF625A}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Skat.KawkaProject.Features.Connections", "Skat.KawkaProject.Features.Connections\Skat.KawkaProject.Features.Connections.csproj", "{43382D72-D321-4CA6-89AE-EE87FD51716E}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -80,6 +82,18 @@ Global
 		{D639A861-52A0-4E71-8976-3DC02AFF625A}.Release|x64.Build.0 = Release|Any CPU
 		{D639A861-52A0-4E71-8976-3DC02AFF625A}.Release|x86.ActiveCfg = Release|Any CPU
 		{D639A861-52A0-4E71-8976-3DC02AFF625A}.Release|x86.Build.0 = Release|Any CPU
+		{43382D72-D321-4CA6-89AE-EE87FD51716E}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{43382D72-D321-4CA6-89AE-EE87FD51716E}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{43382D72-D321-4CA6-89AE-EE87FD51716E}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{43382D72-D321-4CA6-89AE-EE87FD51716E}.Debug|x64.Build.0 = Debug|Any CPU
+		{43382D72-D321-4CA6-89AE-EE87FD51716E}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{43382D72-D321-4CA6-89AE-EE87FD51716E}.Debug|x86.Build.0 = Debug|Any CPU
+		{43382D72-D321-4CA6-89AE-EE87FD51716E}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{43382D72-D321-4CA6-89AE-EE87FD51716E}.Release|Any CPU.Build.0 = Release|Any CPU
+		{43382D72-D321-4CA6-89AE-EE87FD51716E}.Release|x64.ActiveCfg = Release|Any CPU
+		{43382D72-D321-4CA6-89AE-EE87FD51716E}.Release|x64.Build.0 = Release|Any CPU
+		{43382D72-D321-4CA6-89AE-EE87FD51716E}.Release|x86.ActiveCfg = Release|Any CPU
+		{43382D72-D321-4CA6-89AE-EE87FD51716E}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

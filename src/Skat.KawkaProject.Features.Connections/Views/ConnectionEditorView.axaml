@@ -1,0 +1,39 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:Skat.KawkaProject.Features.Connections.ViewModels"
+        x:Class="Skat.KawkaProject.Features.Connections.Views.ConnectionEditorView"
+        x:DataType="vm:ConnectionEditorViewModel"
+        Title="Add / Edit Connection" Width="480" Height="420"
+        CanResize="False">
+    <StackPanel Margin="16" Spacing="8">
+        <TextBlock>Name:</TextBlock>
+        <TextBox Text="{Binding Name}" />
+
+        <TextBlock>Bootstrap Servers (e.g. localhost:9092):</TextBlock>
+        <TextBox Text="{Binding BootstrapServers}" />
+
+        <TextBlock>Authentication:</TextBlock>
+        <ComboBox ItemsSource="{Binding AuthTypes}" SelectedItem="{Binding AuthType}" />
+
+        <StackPanel IsVisible="{Binding ShowSaslFields}" Spacing="4">
+            <TextBlock>SASL Username:</TextBlock>
+            <TextBox Text="{Binding SaslUsername}" />
+            <TextBlock>SASL Password:</TextBlock>
+            <TextBox Text="{Binding SaslPassword}" PasswordChar="*" />
+        </StackPanel>
+
+        <StackPanel IsVisible="{Binding ShowSslFields}" Spacing="4">
+            <TextBlock>SSL Certificate Path:</TextBlock>
+            <TextBox Text="{Binding SslCertPath}" />
+            <TextBlock>SSL Key Path:</TextBlock>
+            <TextBox Text="{Binding SslKeyPath}" />
+            <TextBlock>SSL CA Path:</TextBlock>
+            <TextBox Text="{Binding SslCaPath}" />
+        </StackPanel>
+
+        <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
+            <Button Command="{Binding CancelCommand}">Cancel</Button>
+            <Button Command="{Binding SaveCommand}">Save</Button>
+        </StackPanel>
+    </StackPanel>
+</Window>

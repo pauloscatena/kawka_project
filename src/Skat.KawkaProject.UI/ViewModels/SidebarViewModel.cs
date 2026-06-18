@@ -3,6 +3,8 @@ using System.Windows.Input;
 using ReactiveUI;
 using Skat.KawkaProject.Core.Interfaces;
 using Skat.KawkaProject.Core.Models;
+using Skat.KawkaProject.Features.Connections.ViewModels;
+using Skat.KawkaProject.Features.Connections.Views;
 
 namespace Skat.KawkaProject.UI.ViewModels;
 
@@ -41,7 +43,15 @@ public class SidebarViewModel : ReactiveObject
 
     private void OpenAddConnectionDialog()
     {
-        // Wired in Task 7 when Features.Connections is added
+        var vm = new ConnectionEditorViewModel();
+        var dialog = new ConnectionEditorView { DataContext = vm };
+        vm.Saved += profile =>
+        {
+            AddProfile(profile);
+            dialog.Close();
+        };
+        vm.Cancelled += () => dialog.Close();
+        dialog.Show();
     }
 
     internal void AddProfile(ConnectionProfile profile)
