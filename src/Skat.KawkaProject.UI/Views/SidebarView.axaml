@@ -1,0 +1,41 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Skat.KawkaProject.UI.ViewModels"
+             x:Class="Skat.KawkaProject.UI.Views.SidebarView"
+             x:DataType="vm:SidebarViewModel">
+    <DockPanel>
+        <Button DockPanel.Dock="Top" Command="{Binding AddConnectionCommand}"
+                HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" Margin="8">
+            + Add Connection
+        </Button>
+        <Separator DockPanel.Dock="Top" />
+        <ScrollViewer>
+            <ItemsControl ItemsSource="{Binding Connections}">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate DataType="{x:Type vm:ConnectionNodeViewModel}">
+                        <Expander Margin="4,2">
+                            <Expander.Header>
+                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                    <Ellipse Width="8" Height="8"
+                                             Fill="{Binding Status, Converter={x:Static vm:ConnectionStatusConverter.Instance}}" />
+                                    <TextBlock Text="{Binding Name}" VerticalAlignment="Center" />
+                                </StackPanel>
+                            </Expander.Header>
+                            <StackPanel Margin="16,4,0,4" Spacing="2">
+                                <Button Command="{Binding ConnectCommand}" HorizontalAlignment="Stretch">Connect</Button>
+                                <Button Command="{Binding NavigateToTopicsCommand}" HorizontalAlignment="Stretch">Topics</Button>
+                                <Button Command="{Binding NavigateToMessagesCommand}" HorizontalAlignment="Stretch">Messages</Button>
+                                <Button Command="{Binding NavigateToClusterCommand}" HorizontalAlignment="Stretch">Cluster Info</Button>
+                                <Separator />
+                                <Button Command="{Binding DeleteCommand}" HorizontalAlignment="Stretch"
+                                        Foreground="Red">Remove</Button>
+                                <TextBlock Text="{Binding ErrorMessage}" Foreground="Red" TextWrapping="Wrap"
+                                           IsVisible="{Binding ErrorMessage, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+                            </StackPanel>
+                        </Expander>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </ScrollViewer>
+    </DockPanel>
+</UserControl>

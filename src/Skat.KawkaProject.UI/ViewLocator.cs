@@ -1,32 +1,31 @@
-using System;
 using Avalonia.Controls;
 using Avalonia.Controls.Templates;
-using Skat.KawkaProject.UI.ViewModels;
+using ReactiveUI;
 
-namespace Skat.KawkaProject.UI
+namespace Skat.KawkaProject.UI;
+
+public class ViewLocator : IDataTemplate
 {
-    public class ViewLocator : IDataTemplate
+    public Control? Build(object? data)
     {
-        public bool SupportsRecycling => false;
+        if (data is null) return null;
 
-        public IControl Build(object data)
-        {
-            var name = data.GetType().FullName!.Replace("ViewModel", "View");
-            var type = Type.GetType(name);
+        var viewName = data.GetType().FullName!
+            .Replace("ViewModels.", "Views.")
+            .Replace("ViewModel", "View");
 
-            if (type != null)
+        var type = AppDomain.CurrentDomain.GetAssemblies()
+            .SelectMany(a =>
             {
-                return (Control) Activator.CreateInstance(type)!;
-            }
-            else
-            {
-                return new TextBlock {Text = "Not Found: " + name};
-            }
-        }
+                try { return a.GetTypes(); }
+                catch { return Array.Empty<Type>(); }
+            })
+            .FirstOrDefault(t => t.FullName == viewName);
 
-        public bool Match(object data)
-        {
-            return data is ViewModelBase;
-        }
+        return type != null
+            ? (Control)Activator.CreateInstance(type)!
+            : new TextBlock { Text = "View not found: " + viewName };
     }
+
+    public bool Match(object? data) => data is ReactiveObject;
 }
