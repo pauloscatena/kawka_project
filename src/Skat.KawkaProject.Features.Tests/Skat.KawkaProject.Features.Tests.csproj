@@ -25,6 +25,7 @@
     <ProjectReference Include="..\Skat.KawkaProject.Core\Skat.KawkaProject.Core.csproj" />
     <ProjectReference Include="..\Skat.KawkaProject.Features.Topics\Skat.KawkaProject.Features.Topics.csproj" />
     <ProjectReference Include="..\Skat.KawkaProject.Features.Messages\Skat.KawkaProject.Features.Messages.csproj" />
+    <ProjectReference Include="..\Skat.KawkaProject.Features.Cluster\Skat.KawkaProject.Features.Cluster.csproj" />
   </ItemGroup>
 
 </Project>

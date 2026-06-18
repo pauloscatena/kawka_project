@@ -1,0 +1,71 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Skat.KawkaProject.Features.Cluster.ViewModels"
+             x:Class="Skat.KawkaProject.Features.Cluster.Views.ClusterView"
+             x:DataType="vm:ClusterViewModel">
+    <DockPanel>
+        <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Spacing="8" Margin="8">
+            <Button Command="{Binding LoadCommand}">Refresh</Button>
+        </StackPanel>
+        <Border DockPanel.Dock="Top" Background="#FFDDDD" Padding="8"
+                IsVisible="{Binding ErrorMessage, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
+            <TextBlock Text="{Binding ErrorMessage}" Foreground="DarkRed" />
+        </Border>
+        <ProgressBar DockPanel.Dock="Top" IsIndeterminate="True" IsVisible="{Binding IsBusy}" Height="4" />
+
+        <TabControl>
+            <TabItem Header="Brokers">
+                <ListBox ItemsSource="{Binding Brokers}">
+                    <ListBox.ItemTemplate>
+                        <DataTemplate>
+                            <Grid ColumnDefinitions="60,*,80,80">
+                                <TextBlock Grid.Column="0" Text="{Binding BrokerId}" />
+                                <TextBlock Grid.Column="1" Text="{Binding Host}" />
+                                <TextBlock Grid.Column="2" Text="{Binding Port}" />
+                                <TextBlock Grid.Column="3" Text="{Binding IsController}" />
+                            </Grid>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
+            </TabItem>
+
+            <TabItem Header="Consumer Groups">
+                <ListBox ItemsSource="{Binding ConsumerGroups}" SelectedItem="{Binding SelectedGroup}">
+                    <ListBox.ItemTemplate>
+                        <DataTemplate>
+                            <Grid ColumnDefinitions="*,100,60">
+                                <TextBlock Grid.Column="0" Text="{Binding GroupId}" />
+                                <TextBlock Grid.Column="1" Text="{Binding State}" />
+                                <TextBlock Grid.Column="2" Text="{Binding MemberCount}" />
+                            </Grid>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
+            </TabItem>
+
+            <TabItem Header="Lag">
+                <DockPanel>
+                    <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Spacing="8" Margin="8">
+                        <ComboBox ItemsSource="{Binding ConsumerGroups}" SelectedItem="{Binding SelectedGroup}"
+                                  DisplayMemberBinding="{Binding GroupId}" Width="200" />
+                        <Button Command="{Binding LoadLagCommand}">Load Lag</Button>
+                        <TextBlock VerticalAlignment="Center" Foreground="Gray">Auto-refreshes every 10s</TextBlock>
+                    </StackPanel>
+                    <ListBox ItemsSource="{Binding Lag}">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate>
+                                <Grid ColumnDefinitions="*,60,100,100,80">
+                                    <TextBlock Grid.Column="0" Text="{Binding Topic}" />
+                                    <TextBlock Grid.Column="1" Text="{Binding Partition}" />
+                                    <TextBlock Grid.Column="2" Text="{Binding CurrentOffset}" />
+                                    <TextBlock Grid.Column="3" Text="{Binding EndOffset}" />
+                                    <TextBlock Grid.Column="4" Text="{Binding Lag}" FontWeight="Bold" />
+                                </Grid>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                </DockPanel>
+            </TabItem>
+        </TabControl>
+    </DockPanel>
+</UserControl>
