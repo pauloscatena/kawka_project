@@ -1,0 +1,56 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Skat.KawkaProject.Features.Topics.ViewModels"
+             x:Class="Skat.KawkaProject.Features.Topics.Views.TopicsView"
+             x:DataType="vm:TopicsViewModel">
+    <DockPanel>
+        <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Spacing="8" Margin="8">
+            <TextBox Text="{Binding Filter}" Watermark="Filter topics..." Width="200" />
+            <Button Command="{Binding LoadCommand}">Refresh</Button>
+        </StackPanel>
+
+        <Border DockPanel.Dock="Top" Background="#FFDDDD" Padding="8"
+                IsVisible="{Binding ErrorMessage, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
+            <Grid ColumnDefinitions="*,Auto">
+                <TextBlock Grid.Column="0" Text="{Binding ErrorMessage}" Foreground="DarkRed" TextWrapping="Wrap" />
+                <Button Grid.Column="1" Command="{Binding DismissErrorCommand}" Padding="4,0">✕</Button>
+            </Grid>
+        </Border>
+
+        <ProgressBar DockPanel.Dock="Top" IsIndeterminate="True"
+                     IsVisible="{Binding IsBusy}" Height="4" />
+
+        <Grid ColumnDefinitions="*,300">
+            <ListBox Grid.Column="0" ItemsSource="{Binding Topics}"
+                     SelectedItem="{Binding SelectedTopic}">
+                <ListBox.ItemTemplate>
+                    <DataTemplate>
+                        <Grid ColumnDefinitions="*,Auto,Auto">
+                            <TextBlock Grid.Column="0" Text="{Binding Name}" />
+                            <TextBlock Grid.Column="1" Text="{Binding PartitionCount}" Margin="8,0" />
+                            <TextBlock Grid.Column="2" Text="{Binding ReplicationFactor}" />
+                        </Grid>
+                    </DataTemplate>
+                </ListBox.ItemTemplate>
+            </ListBox>
+
+            <Border Grid.Column="1" Padding="8"
+                    IsVisible="{Binding SelectedTopicDetail, Converter={x:Static ObjectConverters.IsNotNull}}">
+                <StackPanel>
+                    <TextBlock Text="{Binding SelectedTopicDetail.Topic.Name}" FontWeight="Bold" />
+                    <ItemsControl ItemsSource="{Binding SelectedTopicDetail.Partitions}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Grid ColumnDefinitions="Auto,*,*" Margin="0,2">
+                                    <TextBlock Grid.Column="0" Text="{Binding PartitionId}" Width="30" />
+                                    <TextBlock Grid.Column="1" Text="{Binding EarliestOffset}" />
+                                    <TextBlock Grid.Column="2" Text="{Binding LatestOffset}" />
+                                </Grid>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
+            </Border>
+        </Grid>
+    </DockPanel>
+</UserControl>

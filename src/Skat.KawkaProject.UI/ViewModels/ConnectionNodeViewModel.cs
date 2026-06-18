@@ -69,10 +69,11 @@ public class ConnectionNodeViewModel : ReactiveObject
             Status = ConnectionStatus.Disconnected;
         });
 
-        // Navigation commands wired in Tasks 8-10 when feature projects are added
         NavigateToTopicsCommand = ReactiveCommand.Create(() =>
         {
             if (_session == null) return;
+            shell.Router.Navigate.Execute(
+                new Skat.KawkaProject.Features.Topics.ViewModels.TopicsViewModel(shell, _session, topicService));
         });
 
         NavigateToMessagesCommand = ReactiveCommand.Create(() =>
