@@ -8,6 +8,7 @@
     </PropertyGroup>
     <ItemGroup>
         <AvaloniaResource Include="Assets\**" />
+        <AvaloniaResource Include="Styles\**" />
     </ItemGroup>
     <ItemGroup>
         <PackageReference Include="Avalonia" Version="11.3.9" />

@@ -1,0 +1,24 @@
+<ResourceDictionary xmlns="https://github.com/avaloniaui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <SolidColorBrush x:Key="BackgroundBrush"       Color="#1e1e2e" />
+    <SolidColorBrush x:Key="SurfaceBrush"          Color="#181825" />
+    <SolidColorBrush x:Key="SurfaceDeepBrush"      Color="#11111b" />
+    <SolidColorBrush x:Key="BorderBrush"           Color="#313244" />
+    <SolidColorBrush x:Key="BorderSubtleBrush"     Color="#2a2a3d" />
+    <SolidColorBrush x:Key="TextPrimaryBrush"      Color="#cdd6f4" />
+    <SolidColorBrush x:Key="TextMutedBrush"        Color="#7f849c" />
+    <SolidColorBrush x:Key="TextFaintBrush"        Color="#45475a" />
+    <SolidColorBrush x:Key="AccentBrush"           Color="#0088CC" />
+    <SolidColorBrush x:Key="AccentSubtleBrush"     Color="#1F0088CC" />
+    <SolidColorBrush x:Key="StatusLiveBrush"       Color="#a6e3a1" />
+    <SolidColorBrush x:Key="StatusConnBrush"       Color="#f9e2af" />
+    <SolidColorBrush x:Key="StatusErrorBrush"      Color="#f38ba8" />
+    <SolidColorBrush x:Key="StatusOffBrush"        Color="#45475a" />
+    <SolidColorBrush x:Key="StatusLiveBadgeBrush"  Color="#1Fa6e3a1" />
+    <SolidColorBrush x:Key="StatusConnBadgeBrush"  Color="#1Ff9e2af" />
+    <SolidColorBrush x:Key="StatusErrorBadgeBrush" Color="#1Ff38ba8" />
+    <SolidColorBrush x:Key="StatusOffBadgeBrush"   Color="#1F45475a" />
+    <SolidColorBrush x:Key="RowHoverBrush"         Color="#262637" />
+    <SolidColorBrush x:Key="DestructiveBrush"      Color="#1Af38ba8" />
+    <SolidColorBrush x:Key="DestructiveTextBrush"  Color="#f38ba8" />
+</ResourceDictionary>
