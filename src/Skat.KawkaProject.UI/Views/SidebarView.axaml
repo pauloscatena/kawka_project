@@ -2,37 +2,116 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:Skat.KawkaProject.UI.ViewModels"
              x:Class="Skat.KawkaProject.UI.Views.SidebarView"
-             x:DataType="vm:SidebarViewModel">
+             x:DataType="vm:SidebarViewModel"
+             Background="{DynamicResource SurfaceBrush}">
     <DockPanel>
-        <Button DockPanel.Dock="Top" Command="{Binding AddConnectionCommand}"
-                HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" Margin="8">
-            + Add Connection
-        </Button>
-        <Separator DockPanel.Dock="Top" />
+        <!-- Toolbar -->
+        <Border DockPanel.Dock="Top" Padding="8"
+                BorderBrush="{DynamicResource BorderSubtleBrush}"
+                BorderThickness="0,0,0,1">
+            <Button Command="{Binding AddConnectionCommand}"
+                    HorizontalAlignment="Stretch"
+                    HorizontalContentAlignment="Left"
+                    Padding="8,5" FontSize="11"
+                    Background="{DynamicResource AccentSubtleBrush}"
+                    BorderBrush="{DynamicResource AccentBrush}"
+                    BorderThickness="1"
+                    Foreground="{DynamicResource AccentBrush}"
+                    CornerRadius="5">
+                ＋ Add Connection
+            </Button>
+        </Border>
+
+        <!-- Footer -->
+        <Border DockPanel.Dock="Bottom" Padding="10,8"
+                BorderBrush="{DynamicResource BorderSubtleBrush}"
+                BorderThickness="0,1,0,0">
+            <TextBlock FontSize="10" Foreground="{DynamicResource TextFaintBrush}">
+                ⚙ Settings · ? Docs
+            </TextBlock>
+        </Border>
+
+        <!-- Section label -->
+        <TextBlock DockPanel.Dock="Top"
+                   Margin="12,8,0,2" FontSize="9" FontWeight="Bold"
+                   Text="CONNECTIONS"
+                   Foreground="{DynamicResource TextFaintBrush}" />
+
+        <!-- Connection list -->
         <ScrollViewer>
             <ItemsControl ItemsSource="{Binding Connections}">
                 <ItemsControl.ItemTemplate>
                     <DataTemplate DataType="{x:Type vm:ConnectionNodeViewModel}">
-                        <Expander Margin="4,2">
-                            <Expander.Header>
-                                <StackPanel Orientation="Horizontal" Spacing="6">
-                                    <Ellipse Width="8" Height="8"
+                        <Border Padding="4,2">
+                            <StackPanel>
+                                <!-- Header: dot + name + status badge -->
+                                <Grid ColumnDefinitions="Auto,*,Auto" Margin="6,4">
+                                    <Ellipse Grid.Column="0"
+                                             Width="8" Height="8" Margin="0,0,8,0"
+                                             VerticalAlignment="Center"
                                              Fill="{Binding Status, Converter={x:Static vm:ConnectionStatusConverter.Instance}}" />
-                                    <TextBlock Text="{Binding Name}" VerticalAlignment="Center" />
+                                    <TextBlock Grid.Column="1"
+                                               Text="{Binding Name}"
+                                               FontSize="12" FontWeight="SemiBold"
+                                               Foreground="{DynamicResource TextPrimaryBrush}"
+                                               VerticalAlignment="Center" />
+                                    <Border Grid.Column="2"
+                                            CornerRadius="10" Padding="5,1"
+                                            Background="{Binding Status, Converter={x:Static vm:ConnectionStatusConverter.Instance}, ConverterParameter=badge}">
+                                        <TextBlock Text="{Binding StatusLabel}"
+                                                   FontSize="9" FontWeight="Bold"
+                                                   Foreground="{Binding Status, Converter={x:Static vm:ConnectionStatusConverter.Instance}}" />
+                                    </Border>
+                                </Grid>
+
+                                <!-- Action chips: connected -->
+                                <StackPanel Orientation="Horizontal" Margin="22,0,0,4" Spacing="2"
+                                            IsVisible="{Binding IsConnected}">
+                                    <Button Command="{Binding NavigateToTopicsCommand}"
+                                            Padding="6,3" FontSize="10"
+                                            Background="Transparent" BorderThickness="0"
+                                            Foreground="{DynamicResource TextMutedBrush}">
+                                        📋 Topics
+                                    </Button>
+                                    <Button Command="{Binding NavigateToMessagesCommand}"
+                                            Padding="6,3" FontSize="10"
+                                            Background="Transparent" BorderThickness="0"
+                                            Foreground="{DynamicResource TextMutedBrush}">
+                                        ✉ Msgs
+                                    </Button>
+                                    <Button Command="{Binding NavigateToClusterCommand}"
+                                            Padding="6,3" FontSize="10"
+                                            Background="Transparent" BorderThickness="0"
+                                            Foreground="{DynamicResource TextMutedBrush}">
+                                        🖥 Cluster
+                                    </Button>
                                 </StackPanel>
-                            </Expander.Header>
-                            <StackPanel Margin="16,4,0,4" Spacing="2">
-                                <Button Command="{Binding ConnectCommand}" HorizontalAlignment="Stretch">Connect</Button>
-                                <Button Command="{Binding NavigateToTopicsCommand}" HorizontalAlignment="Stretch">Topics</Button>
-                                <Button Command="{Binding NavigateToMessagesCommand}" HorizontalAlignment="Stretch">Messages</Button>
-                                <Button Command="{Binding NavigateToClusterCommand}" HorizontalAlignment="Stretch">Cluster Info</Button>
-                                <Separator />
-                                <Button Command="{Binding DeleteCommand}" HorizontalAlignment="Stretch"
-                                        Foreground="Red">Remove</Button>
-                                <TextBlock Text="{Binding ErrorMessage}" Foreground="Red" TextWrapping="Wrap"
+
+                                <!-- Action chips: disconnected -->
+                                <StackPanel Orientation="Horizontal" Margin="22,0,0,4" Spacing="2"
+                                            IsVisible="{Binding IsDisconnected}">
+                                    <Button Command="{Binding ConnectCommand}"
+                                            Padding="6,3" FontSize="10"
+                                            Background="Transparent" BorderThickness="0"
+                                            Foreground="{DynamicResource TextMutedBrush}">
+                                        ⚡ Connect
+                                    </Button>
+                                    <Button Command="{Binding DeleteCommand}"
+                                            Padding="6,3" FontSize="10"
+                                            Background="Transparent" BorderThickness="0"
+                                            Foreground="{DynamicResource DestructiveTextBrush}">
+                                        🗑 Remove
+                                    </Button>
+                                </StackPanel>
+
+                                <!-- Error message -->
+                                <TextBlock Text="{Binding ErrorMessage}"
+                                           Foreground="{DynamicResource StatusErrorBrush}"
+                                           FontSize="10" TextWrapping="Wrap"
+                                           Margin="22,0,6,4"
                                            IsVisible="{Binding ErrorMessage, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
                             </StackPanel>
-                        </Expander>
+                        </Border>
                     </DataTemplate>
                 </ItemsControl.ItemTemplate>
             </ItemsControl>

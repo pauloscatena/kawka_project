@@ -19,8 +19,25 @@ public class ConnectionNodeViewModel : ReactiveObject
     public ConnectionStatus Status
     {
         get => _status;
-        private set => this.RaiseAndSetIfChanged(ref _status, value);
+        private set
+        {
+            this.RaiseAndSetIfChanged(ref _status, value);
+            this.RaisePropertyChanged(nameof(IsConnected));
+            this.RaisePropertyChanged(nameof(IsDisconnected));
+            this.RaisePropertyChanged(nameof(StatusLabel));
+        }
     }
+
+    public bool IsConnected => _status == ConnectionStatus.Connected;
+    public bool IsDisconnected => _status != ConnectionStatus.Connected;
+
+    public string StatusLabel => _status switch
+    {
+        ConnectionStatus.Connected => "live",
+        ConnectionStatus.Connecting => "conn…",
+        ConnectionStatus.Error => "error",
+        _ => "off"
+    };
 
     public string? ErrorMessage
     {
