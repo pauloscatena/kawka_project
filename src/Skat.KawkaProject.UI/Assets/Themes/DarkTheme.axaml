@@ -15,9 +15,6 @@
     <SolidColorBrush x:Key="StatusErrorBrush"      Color="#f38ba8" />
     <SolidColorBrush x:Key="StatusOffBrush"        Color="#45475a" />
     <SolidColorBrush x:Key="StatusLiveBadgeBrush"  Color="#1Fa6e3a1" />
-    <SolidColorBrush x:Key="StatusConnBadgeBrush"  Color="#1Ff9e2af" />
-    <SolidColorBrush x:Key="StatusErrorBadgeBrush" Color="#1Ff38ba8" />
-    <SolidColorBrush x:Key="StatusOffBadgeBrush"   Color="#1F45475a" />
     <SolidColorBrush x:Key="RowHoverBrush"         Color="#262637" />
     <SolidColorBrush x:Key="DestructiveBrush"      Color="#1Af38ba8" />
     <SolidColorBrush x:Key="DestructiveTextBrush"  Color="#f38ba8" />

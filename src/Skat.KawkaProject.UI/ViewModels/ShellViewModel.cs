@@ -12,6 +12,7 @@ public class ShellViewModel : ReactiveObject, IScreen
     public SidebarViewModel Sidebar { get; }
     public ICommand ToggleThemeCommand { get; }
 
+    // Raised manually from ToggleThemeCommand; must be kept in sync if other code paths mutate RequestedThemeVariant
     public string ThemeLabel =>
         Application.Current?.RequestedThemeVariant == ThemeVariant.Dark ? "☀ Light" : "🌙 Dark";
 
