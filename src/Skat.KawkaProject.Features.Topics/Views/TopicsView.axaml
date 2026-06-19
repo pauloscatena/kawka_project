@@ -19,6 +19,40 @@
                 <Button Command="{Binding LoadCommand}" FontSize="11" Padding="8,4"
                         Background="{DynamicResource SurfaceBrush}"
                         BorderBrush="{DynamicResource BorderBrush}">↺ Refresh</Button>
+                <Button Command="{Binding ShowCreateFormCommand}" FontSize="11" Padding="8,4"
+                        Background="{DynamicResource AccentSubtleBrush}"
+                        BorderBrush="{DynamicResource AccentBrush}"
+                        Foreground="{DynamicResource AccentBrush}"
+                        IsVisible="{Binding IsNotCreatingTopic}">＋ New Topic</Button>
+            </StackPanel>
+        </Border>
+
+        <!-- Create topic form -->
+        <Border DockPanel.Dock="Top" Padding="10,6"
+                Background="{DynamicResource SurfaceBrush}"
+                BorderBrush="{DynamicResource AccentBrush}"
+                BorderThickness="0,0,0,1"
+                IsVisible="{Binding IsCreatingTopic}">
+            <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                <TextBlock FontSize="11" Foreground="{DynamicResource TextMutedBrush}"
+                           VerticalAlignment="Center">New topic:</TextBlock>
+                <TextBox Text="{Binding NewTopicName}" Watermark="Topic name"
+                         Width="200" FontSize="11" Height="26" VerticalContentAlignment="Center" />
+                <TextBlock FontSize="11" Foreground="{DynamicResource TextMutedBrush}"
+                           VerticalAlignment="Center">Partitions:</TextBlock>
+                <NumericUpDown Value="{Binding NewTopicPartitions}" Minimum="1"
+                               Width="90" FontSize="11" />
+                <TextBlock FontSize="11" Foreground="{DynamicResource TextMutedBrush}"
+                           VerticalAlignment="Center">Replication:</TextBlock>
+                <NumericUpDown Value="{Binding NewTopicReplicationFactor}" Minimum="1"
+                               Width="90" FontSize="11" />
+                <Button Command="{Binding CreateTopicCommand}" FontSize="11" Padding="8,4"
+                        Background="{DynamicResource AccentSubtleBrush}"
+                        BorderBrush="{DynamicResource AccentBrush}"
+                        Foreground="{DynamicResource AccentBrush}">Create</Button>
+                <Button Command="{Binding CancelCreateCommand}" FontSize="11" Padding="8,4"
+                        Background="Transparent" BorderThickness="0"
+                        Foreground="{DynamicResource TextMutedBrush}">✕ Cancel</Button>
             </StackPanel>
         </Border>
 
@@ -137,13 +171,25 @@
                         <StackPanel Margin="12,8">
                             <TextBlock Text="PARTITIONS" FontSize="9" FontWeight="Bold"
                                        Foreground="{DynamicResource TextFaintBrush}"
-                                       Margin="0,0,0,6" />
+                                       Margin="0,0,0,4" />
+                            <!-- Partition column headers -->
+                            <Grid ColumnDefinitions="30,*,*" Margin="0,0,0,4">
+                                <TextBlock Grid.Column="0" Text="#"
+                                           FontSize="9" FontWeight="Bold"
+                                           Foreground="{DynamicResource TextFaintBrush}" />
+                                <TextBlock Grid.Column="1" Text="EARLIEST"
+                                           FontSize="9" FontWeight="Bold"
+                                           Foreground="{DynamicResource TextFaintBrush}" />
+                                <TextBlock Grid.Column="2" Text="LATEST"
+                                           FontSize="9" FontWeight="Bold"
+                                           Foreground="{DynamicResource TextFaintBrush}" />
+                            </Grid>
                             <ItemsControl ItemsSource="{Binding SelectedTopicDetail.Partitions}">
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate>
                                         <Grid ColumnDefinitions="30,*,*" Margin="0,3">
                                             <TextBlock Grid.Column="0" Text="{Binding PartitionId}"
-                                                       FontSize="11"
+                                                       FontSize="11" FontWeight="SemiBold"
                                                        Foreground="{DynamicResource TextMutedBrush}" />
                                             <TextBlock Grid.Column="1" Text="{Binding EarliestOffset}"
                                                        FontSize="11"

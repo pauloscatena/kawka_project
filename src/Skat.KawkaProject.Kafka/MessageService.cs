@@ -18,23 +18,26 @@ public class MessageService : IMessageService
         };
         ((KafkaSession)session).ApplyTo(cfg);
 
-        var messages = new List<KafkaMessage>();
-        using var consumer = new ConsumerBuilder<string, string>(cfg).Build();
-        consumer.Assign(new TopicPartitionOffset(topicName, partition, startOffset));
-
-        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(15));
-        try
+        return await Task.Run(() =>
         {
-            while (messages.Count < count)
-            {
-                var result = consumer.Consume(cts.Token);
-                if (result?.Message == null) break;
-                messages.Add(ToMessage(result));
-            }
-        }
-        catch (OperationCanceledException) { }
+            var messages = new List<KafkaMessage>();
+            using var consumer = new ConsumerBuilder<string, string>(cfg).Build();
+            consumer.Assign(new TopicPartitionOffset(topicName, partition, startOffset));
 
-        return messages;
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+            try
+            {
+                while (messages.Count < count)
+                {
+                    var result = consumer.Consume(cts.Token);
+                    if (result?.Message == null) break;
+                    messages.Add(ToMessage(result));
+                }
+            }
+            catch (OperationCanceledException) { }
+
+            return (IEnumerable<KafkaMessage>)messages;
+        });
     }
 
     public IObservable<KafkaMessage> Tail(IKafkaSession session, string topicName) =>
@@ -71,6 +74,14 @@ public class MessageService : IMessageService
 
             return () => cts.Cancel();
         });
+
+    public async Task ProduceAsync(IKafkaSession session, string topicName, string? key, string value)
+    {
+        var cfg = new ProducerConfig();
+        ((KafkaSession)session).ApplyTo(cfg);
+        using var producer = new ProducerBuilder<string?, string>(cfg).Build();
+        await producer.ProduceAsync(topicName, new Message<string?, string> { Key = key, Value = value });
+    }
 
     private static KafkaMessage ToMessage(ConsumeResult<string, string> r) =>
         new(r.Topic, r.Partition.Value, r.Offset.Value,

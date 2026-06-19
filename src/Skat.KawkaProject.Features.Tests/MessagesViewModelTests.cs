@@ -28,7 +28,7 @@ public class MessagesViewModelTests
         svc.Setup(s => s.FetchMessagesAsync(It.IsAny<IKafkaSession>(), "t", 0, 0, 50))
            .ReturnsAsync(new[] { Msg("hello"), Msg("world") });
 
-        var vm = new MessagesViewModel(FakeScreen(), FakeSession(), svc.Object);
+        var vm = new MessagesViewModel(FakeScreen(), FakeSession(), svc.Object, new Mock<ITopicService>().Object);
         vm.TopicName = "t";
         await vm.FetchMessagesAsync();
 
@@ -43,7 +43,7 @@ public class MessagesViewModelTests
         svc.Setup(s => s.Tail(It.IsAny<IKafkaSession>(), It.IsAny<string>()))
            .Returns(subject);
 
-        var vm = new MessagesViewModel(FakeScreen(), FakeSession(), svc.Object);
+        var vm = new MessagesViewModel(FakeScreen(), FakeSession(), svc.Object, new Mock<ITopicService>().Object);
         vm.TopicName = "live-topic";
         vm.StartTail();
 
@@ -62,7 +62,7 @@ public class MessagesViewModelTests
         svc.Setup(s => s.Tail(It.IsAny<IKafkaSession>(), It.IsAny<string>()))
            .Returns(subject);
 
-        var vm = new MessagesViewModel(FakeScreen(), FakeSession(), svc.Object);
+        var vm = new MessagesViewModel(FakeScreen(), FakeSession(), svc.Object, new Mock<ITopicService>().Object);
         vm.TopicName = "paused-topic";
         vm.StartTail();
         vm.PauseTail();

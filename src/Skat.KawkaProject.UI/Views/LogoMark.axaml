@@ -1,0 +1,30 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="Skat.KawkaProject.UI.Views.LogoMark">
+    <Viewbox Stretch="Uniform">
+        <Canvas Width="38" Height="34">
+            <!-- Steam wisps -->
+            <Path Stroke="{DynamicResource AccentBrush}" StrokeThickness="1.5"
+                  StrokeLineCap="Round"
+                  Data="M 9,10 C 7,5 13,4 10,0" />
+            <Path Stroke="{DynamicResource AccentBrush}" StrokeThickness="1.5"
+                  StrokeLineCap="Round"
+                  Data="M 16,10 C 14,5 20,4 17,0" />
+            <Path Stroke="{DynamicResource AccentBrush}" StrokeThickness="1.5"
+                  StrokeLineCap="Round"
+                  Data="M 23,10 C 21,5 27,4 24,0" />
+            <!-- Cup rim -->
+            <Rectangle Canvas.Left="2" Canvas.Top="10" Width="28" Height="2.5"
+                       RadiusX="1.5" RadiusY="1.5"
+                       Fill="{DynamicResource AccentBrush}" />
+            <!-- Cup body -->
+            <Path Fill="{DynamicResource AccentSubtleBrush}"
+                  Stroke="{DynamicResource AccentBrush}" StrokeThickness="1.5"
+                  Data="M 3,12.5 L 5.5,30 Q 5.5,32 8,32 L 24,32 Q 26.5,32 26.5,30 L 29,12.5 Z" />
+            <!-- Handle -->
+            <Path Stroke="{DynamicResource AccentBrush}" StrokeThickness="2"
+                  Fill="Transparent" StrokeLineCap="Round"
+                  Data="M 29,17 Q 38,17 38,23 Q 38,29 29,27.5" />
+        </Canvas>
+    </Viewbox>
+</UserControl>

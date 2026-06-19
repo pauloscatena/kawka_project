@@ -4,6 +4,7 @@ using System.Windows.Input;
 using ReactiveUI;
 using Skat.KawkaProject.Core.Interfaces;
 using Skat.KawkaProject.Core.Models;
+using Unit = System.Reactive.Unit;
 
 namespace Skat.KawkaProject.Features.Messages.ViewModels;
 
@@ -13,11 +14,13 @@ public class MessagesViewModel : ReactiveObject, IRoutableViewModel
 {
     private readonly IKafkaSession _session;
     private readonly IMessageService _messageService;
+    private readonly ITopicService _topicService;
     private IDisposable? _tailSubscription;
     private bool _isPaused;
     private bool _isBusy;
     private string? _errorMessage;
     private string? _selectedMessageValue;
+    private string? _selectedMessageKey;
     private string _topicName = "";
     private int _partition;
     private long _startOffset;
@@ -25,15 +28,28 @@ public class MessagesViewModel : ReactiveObject, IRoutableViewModel
     private MessageMode _mode = MessageMode.Offset;
     private string _clientFilter = "";
     private KafkaMessage? _selectedMessage;
+    private bool _isProducing;
+    private string _produceKey = "";
+    private string _produceValue = "";
 
     public IScreen HostScreen { get; }
     public string UrlPathSegment => "messages";
 
     public ObservableCollection<KafkaMessage> Messages { get; } = new();
+    public bool IsProducing { get => _isProducing; private set { this.RaiseAndSetIfChanged(ref _isProducing, value); this.RaisePropertyChanged(nameof(IsNotProducing)); } }
+    public bool IsNotProducing => !_isProducing;
+    public ObservableCollection<string> AvailableTopics { get; } = new();
+    public Interaction<Unit, bool> ConfirmFetchAll { get; } = new();
+    public string ProduceKey { get => _produceKey; set => this.RaiseAndSetIfChanged(ref _produceKey, value); }
+    public string ProduceValue { get => _produceValue; set => this.RaiseAndSetIfChanged(ref _produceValue, value); }
+
     public ICommand FetchCommand { get; }
     public ICommand StartTailCommand { get; }
     public ICommand PauseCommand { get; }
     public ICommand StopTailCommand { get; }
+    public ICommand ShowProduceFormCommand { get; }
+    public ICommand CancelProduceCommand { get; }
+    public ICommand ProduceCommand { get; }
     public ICommand DismissErrorCommand { get; }
     public IEnumerable<MessageMode> Modes => Enum.GetValues<MessageMode>();
 
@@ -45,6 +61,7 @@ public class MessagesViewModel : ReactiveObject, IRoutableViewModel
     public bool IsPaused { get => _isPaused; private set => this.RaiseAndSetIfChanged(ref _isPaused, value); }
     public string? ErrorMessage { get => _errorMessage; private set => this.RaiseAndSetIfChanged(ref _errorMessage, value); }
     public string? SelectedMessageValue { get => _selectedMessageValue; private set => this.RaiseAndSetIfChanged(ref _selectedMessageValue, value); }
+    public string SelectedMessageKey { get => _selectedMessageKey ?? "N/A"; private set => this.RaiseAndSetIfChanged(ref _selectedMessageKey, value); }
 
     public MessageMode Mode
     {
@@ -67,6 +84,7 @@ public class MessagesViewModel : ReactiveObject, IRoutableViewModel
         {
             this.RaiseAndSetIfChanged(ref _selectedMessage, value);
             SelectedMessageValue = FormatValue(value?.Value);
+            SelectedMessageKey = string.IsNullOrEmpty(value?.Key) ? "N/A" : value.Key;
         }
     }
 
@@ -104,16 +122,32 @@ public class MessagesViewModel : ReactiveObject, IRoutableViewModel
         catch { return raw; }
     }
 
-    public MessagesViewModel(IScreen hostScreen, IKafkaSession session, IMessageService messageService)
+    public MessagesViewModel(IScreen hostScreen, IKafkaSession session, IMessageService messageService, ITopicService topicService)
     {
         HostScreen = hostScreen;
         _session = session;
         _messageService = messageService;
+        _topicService = topicService;
 
         FetchCommand = ReactiveCommand.CreateFromTask(FetchMessagesAsync);
         StartTailCommand = ReactiveCommand.Create(StartTail);
         PauseCommand = ReactiveCommand.Create(PauseTail);
         StopTailCommand = ReactiveCommand.Create(StopTail);
+        ShowProduceFormCommand = ReactiveCommand.CreateFromTask(async () =>
+        {
+            IsProducing = true;
+            ProduceKey = "";
+            ProduceValue = "";
+            try
+            {
+                var topics = await _topicService.ListTopicsAsync(_session);
+                AvailableTopics.Clear();
+                foreach (var t in topics) AvailableTopics.Add(t.Name);
+            }
+            catch { /* ignora — usuário ainda pode digitar manualmente */ }
+        });
+        CancelProduceCommand = ReactiveCommand.Create(() => IsProducing = false);
+        ProduceCommand = ReactiveCommand.CreateFromTask(ProduceMessageAsync);
         DismissErrorCommand = ReactiveCommand.Create(() => ErrorMessage = null);
 
         Messages.CollectionChanged += (_, _) => this.RaisePropertyChanged(nameof(StatusText));
@@ -121,6 +155,16 @@ public class MessagesViewModel : ReactiveObject, IRoutableViewModel
 
     public async Task FetchMessagesAsync()
     {
+        if (string.IsNullOrWhiteSpace(_topicName))
+        {
+            bool confirmed;
+            try { confirmed = await ConfirmFetchAll.Handle(Unit.Default); }
+            catch (UnhandledInteractionException<Unit, bool>) { return; }
+            if (!confirmed) return;
+            await FetchAllTopicsAsync();
+            return;
+        }
+
         IsBusy = true;
         ErrorMessage = null;
         try
@@ -129,6 +173,38 @@ public class MessagesViewModel : ReactiveObject, IRoutableViewModel
                 _session, _topicName, _partition, _startOffset, _fetchCount);
             Messages.Clear();
             foreach (var m in results) Messages.Add(m);
+        }
+        catch (Exception ex) { ErrorMessage = ex.Message; }
+        finally { IsBusy = false; }
+    }
+
+    private async Task FetchAllTopicsAsync()
+    {
+        IsBusy = true;
+        ErrorMessage = null;
+        try
+        {
+            var topics = (await _topicService.ListTopicsAsync(_session)).ToList();
+            Messages.Clear();
+            foreach (var topic in topics)
+            {
+                var results = await _messageService.FetchMessagesAsync(
+                    _session, topic.Name, _partition, _startOffset, _fetchCount);
+                foreach (var m in results) Messages.Add(m);
+            }
+        }
+        catch (Exception ex) { ErrorMessage = ex.Message; }
+        finally { IsBusy = false; }
+    }
+
+    public async Task ProduceMessageAsync()
+    {
+        IsBusy = true;
+        ErrorMessage = null;
+        try
+        {
+            await _messageService.ProduceAsync(_session, _topicName, string.IsNullOrEmpty(_produceKey) ? null : _produceKey, _produceValue);
+            IsProducing = false;
         }
         catch (Exception ex) { ErrorMessage = ex.Message; }
         finally { IsBusy = false; }

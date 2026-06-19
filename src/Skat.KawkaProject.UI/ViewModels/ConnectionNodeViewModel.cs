@@ -97,7 +97,7 @@ public class ConnectionNodeViewModel : ReactiveObject
         {
             if (_session == null) return;
             shell.Router.Navigate.Execute(
-                new Skat.KawkaProject.Features.Messages.ViewModels.MessagesViewModel(shell, _session, messageService));
+                new Skat.KawkaProject.Features.Messages.ViewModels.MessagesViewModel(shell, _session, messageService, topicService));
         });
 
         NavigateToClusterCommand = ReactiveCommand.Create(() =>
