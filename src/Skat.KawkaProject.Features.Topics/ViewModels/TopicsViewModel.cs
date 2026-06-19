@@ -55,6 +55,10 @@ public class TopicsViewModel : ReactiveObject, IRoutableViewModel
         private set => this.RaiseAndSetIfChanged(ref _selectedTopicDetail, value);
     }
 
+    public string StatusText => string.IsNullOrWhiteSpace(_filter)
+        ? $"{_session.ProfileName}  ·  {_allTopics.Count} topics"
+        : $"{_session.ProfileName}  ·  {Topics.Count} / {_allTopics.Count} topics";
+
     public TopicsViewModel(IScreen hostScreen, IKafkaSession session, ITopicService topicService)
     {
         HostScreen = hostScreen;
@@ -123,5 +127,6 @@ public class TopicsViewModel : ReactiveObject, IRoutableViewModel
             ? _allTopics
             : _allTopics.Where(t => t.Name.Contains(_filter, StringComparison.OrdinalIgnoreCase));
         foreach (var t in filtered) Topics.Add(t);
+        this.RaisePropertyChanged(nameof(StatusText));
     }
 }
