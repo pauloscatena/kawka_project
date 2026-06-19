@@ -3,37 +3,87 @@
         xmlns:vm="using:Skat.KawkaProject.Features.Connections.ViewModels"
         x:Class="Skat.KawkaProject.Features.Connections.Views.ConnectionEditorView"
         x:DataType="vm:ConnectionEditorViewModel"
-        Title="Add / Edit Connection" Width="480" Height="420"
-        CanResize="False">
-    <StackPanel Margin="16" Spacing="8">
-        <TextBlock>Name:</TextBlock>
-        <TextBox Text="{Binding Name}" />
+        Title="Add / Edit Connection"
+        Width="480" Height="420"
+        CanResize="False"
+        Background="{DynamicResource SurfaceBrush}"
+        FontFamily="Segoe UI,system-ui,-apple-system,sans-serif">
+    <StackPanel Margin="20" Spacing="10">
+        <!-- Name -->
+        <TextBlock Text="Name" FontSize="10" FontWeight="Bold"
+                   Foreground="{DynamicResource TextMutedBrush}" />
+        <TextBox Text="{Binding Name}" Height="30" FontSize="12"
+                 Background="{DynamicResource SurfaceDeepBrush}"
+                 BorderBrush="{DynamicResource BorderBrush}"
+                 Foreground="{DynamicResource TextPrimaryBrush}" />
 
-        <TextBlock>Bootstrap Servers (e.g. localhost:9092):</TextBlock>
-        <TextBox Text="{Binding BootstrapServers}" />
+        <!-- Bootstrap Servers -->
+        <TextBlock Text="Bootstrap Servers (e.g. localhost:9092)"
+                   FontSize="10" FontWeight="Bold"
+                   Foreground="{DynamicResource TextMutedBrush}" />
+        <TextBox Text="{Binding BootstrapServers}" Height="30" FontSize="12"
+                 Background="{DynamicResource SurfaceDeepBrush}"
+                 BorderBrush="{DynamicResource BorderBrush}"
+                 Foreground="{DynamicResource TextPrimaryBrush}" />
 
-        <TextBlock>Authentication:</TextBlock>
-        <ComboBox ItemsSource="{Binding AuthTypes}" SelectedItem="{Binding AuthType}" />
+        <!-- Authentication -->
+        <TextBlock Text="Authentication" FontSize="10" FontWeight="Bold"
+                   Foreground="{DynamicResource TextMutedBrush}" />
+        <ComboBox ItemsSource="{Binding AuthTypes}" SelectedItem="{Binding AuthType}"
+                  Height="30" FontSize="12" HorizontalAlignment="Stretch"
+                  Background="{DynamicResource SurfaceDeepBrush}"
+                  BorderBrush="{DynamicResource BorderBrush}"
+                  Foreground="{DynamicResource TextPrimaryBrush}" />
 
-        <StackPanel IsVisible="{Binding ShowSaslFields}" Spacing="4">
-            <TextBlock>SASL Username:</TextBlock>
-            <TextBox Text="{Binding SaslUsername}" />
-            <TextBlock>SASL Password:</TextBlock>
-            <TextBox Text="{Binding SaslPassword}" PasswordChar="*" />
+        <!-- SASL fields -->
+        <StackPanel IsVisible="{Binding ShowSaslFields}" Spacing="6">
+            <TextBlock Text="SASL Username" FontSize="10" FontWeight="Bold"
+                       Foreground="{DynamicResource TextMutedBrush}" />
+            <TextBox Text="{Binding SaslUsername}" Height="30" FontSize="12"
+                     Background="{DynamicResource SurfaceDeepBrush}"
+                     BorderBrush="{DynamicResource BorderBrush}"
+                     Foreground="{DynamicResource TextPrimaryBrush}" />
+            <TextBlock Text="SASL Password" FontSize="10" FontWeight="Bold"
+                       Foreground="{DynamicResource TextMutedBrush}" />
+            <TextBox Text="{Binding SaslPassword}" PasswordChar="*" Height="30" FontSize="12"
+                     Background="{DynamicResource SurfaceDeepBrush}"
+                     BorderBrush="{DynamicResource BorderBrush}"
+                     Foreground="{DynamicResource TextPrimaryBrush}" />
         </StackPanel>
 
-        <StackPanel IsVisible="{Binding ShowSslFields}" Spacing="4">
-            <TextBlock>SSL Certificate Path:</TextBlock>
-            <TextBox Text="{Binding SslCertPath}" />
-            <TextBlock>SSL Key Path:</TextBlock>
-            <TextBox Text="{Binding SslKeyPath}" />
-            <TextBlock>SSL CA Path:</TextBlock>
-            <TextBox Text="{Binding SslCaPath}" />
+        <!-- SSL fields -->
+        <StackPanel IsVisible="{Binding ShowSslFields}" Spacing="6">
+            <TextBlock Text="SSL Certificate Path" FontSize="10" FontWeight="Bold"
+                       Foreground="{DynamicResource TextMutedBrush}" />
+            <TextBox Text="{Binding SslCertPath}" Height="30" FontSize="12"
+                     Background="{DynamicResource SurfaceDeepBrush}"
+                     BorderBrush="{DynamicResource BorderBrush}"
+                     Foreground="{DynamicResource TextPrimaryBrush}" />
+            <TextBlock Text="SSL Key Path" FontSize="10" FontWeight="Bold"
+                       Foreground="{DynamicResource TextMutedBrush}" />
+            <TextBox Text="{Binding SslKeyPath}" Height="30" FontSize="12"
+                     Background="{DynamicResource SurfaceDeepBrush}"
+                     BorderBrush="{DynamicResource BorderBrush}"
+                     Foreground="{DynamicResource TextPrimaryBrush}" />
+            <TextBlock Text="SSL CA Path" FontSize="10" FontWeight="Bold"
+                       Foreground="{DynamicResource TextMutedBrush}" />
+            <TextBox Text="{Binding SslCaPath}" Height="30" FontSize="12"
+                     Background="{DynamicResource SurfaceDeepBrush}"
+                     BorderBrush="{DynamicResource BorderBrush}"
+                     Foreground="{DynamicResource TextPrimaryBrush}" />
         </StackPanel>
 
-        <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
-            <Button Command="{Binding CancelCommand}">Cancel</Button>
-            <Button Command="{Binding SaveCommand}">Save</Button>
+        <!-- Action buttons -->
+        <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right" Margin="0,6,0,0">
+            <Button Command="{Binding CancelCommand}" Padding="12,6" FontSize="12"
+                    Background="{DynamicResource SurfaceBrush}"
+                    BorderBrush="{DynamicResource BorderBrush}"
+                    Foreground="{DynamicResource TextMutedBrush}">Cancel</Button>
+            <Button Command="{Binding SaveCommand}" Padding="12,6" FontSize="12"
+                    Background="{DynamicResource AccentSubtleBrush}"
+                    BorderBrush="{DynamicResource AccentBrush}"
+                    Foreground="{DynamicResource AccentBrush}"
+                    FontWeight="SemiBold">Save</Button>
         </StackPanel>
     </StackPanel>
 </Window>
