@@ -1,0 +1,368 @@
+<h2>Estilo da Sidebar de Navegação</h2>
+<p class="subtitle">Escolha o modelo visual que mais combina com o Kawka. Acento: <strong style="color:#0088CC">#0088CC Azul Kafka</strong> — tema dark mostrado abaixo.</p>
+
+<style>
+  /* shared mockup shell */
+  .app-shell {
+    display: flex;
+    height: 340px;
+    border-radius: 8px;
+    overflow: hidden;
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    font-size: 12px;
+    border: 1px solid #3a3a3a;
+    background: #1e1e2e;
+    color: #cdd6f4;
+  }
+  .main-area {
+    flex: 1;
+    background: #1e1e2e;
+    padding: 16px;
+    color: #7f849c;
+    font-size: 11px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+  }
+  /* ---- OPTION A: Rail ---- */
+  .rail {
+    width: 52px;
+    background: #181825;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 8px 0;
+    gap: 4px;
+    border-right: 1px solid #313244;
+  }
+  .rail-item {
+    width: 40px;
+    height: 40px;
+    border-radius: 6px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    color: #7f849c;
+    font-size: 18px;
+    transition: background 0.15s;
+  }
+  .rail-item.active {
+    background: #313244;
+    color: #0088CC;
+  }
+  .rail-item .rail-label {
+    font-size: 8px;
+    margin-top: 1px;
+    letter-spacing: 0.3px;
+  }
+  .rail-panel {
+    width: 180px;
+    background: #1e1e2e;
+    border-right: 1px solid #313244;
+    display: flex;
+    flex-direction: column;
+  }
+  .rail-panel-header {
+    padding: 12px 12px 6px;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 1px;
+    color: #585b70;
+    text-transform: uppercase;
+  }
+  .rail-conn {
+    padding: 6px 12px;
+    border-radius: 4px;
+    margin: 1px 6px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: #cdd6f4;
+    font-size: 12px;
+  }
+  .rail-conn.active { background: #313244; color: #0088CC; }
+  .dot { width: 7px; height: 7px; border-radius: 50%; background: #a6e3a1; flex-shrink: 0; }
+  .dot.grey { background: #585b70; }
+  .rail-nav-item {
+    padding: 5px 12px 5px 28px;
+    font-size: 11px;
+    color: #7f849c;
+    cursor: pointer;
+    border-radius: 4px;
+    margin: 1px 6px;
+  }
+  .rail-nav-item:hover, .rail-nav-item.active { background: #313244; color: #cdd6f4; }
+
+  /* ---- OPTION B: Full sidebar ---- */
+  .full-sidebar {
+    width: 220px;
+    background: #181825;
+    border-right: 1px solid #313244;
+    display: flex;
+    flex-direction: column;
+  }
+  .sidebar-header {
+    padding: 14px 12px 10px;
+    font-size: 13px;
+    font-weight: 700;
+    color: #0088CC;
+    letter-spacing: 0.5px;
+    border-bottom: 1px solid #313244;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .add-btn {
+    margin: 8px;
+    padding: 7px 10px;
+    background: rgba(0,136,204,0.15);
+    border: 1px solid rgba(0,136,204,0.35);
+    border-radius: 6px;
+    color: #0088CC;
+    font-size: 11px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .conn-group {
+    margin: 2px 6px;
+    border-radius: 6px;
+    overflow: hidden;
+  }
+  .conn-header {
+    padding: 7px 10px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    border-radius: 6px;
+    color: #cdd6f4;
+  }
+  .conn-header.active { background: #313244; }
+  .conn-children { padding-left: 8px; }
+  .nav-link {
+    padding: 5px 10px 5px 20px;
+    font-size: 11px;
+    color: #7f849c;
+    cursor: pointer;
+    border-radius: 4px;
+    margin: 1px 0;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .nav-link.active { background: rgba(0,136,204,0.18); color: #0088CC; font-weight: 500; }
+  .nav-link:not(.active):hover { color: #cdd6f4; background: #313244; }
+
+  /* ---- OPTION C: Modernized tree ---- */
+  .tree-sidebar {
+    width: 240px;
+    background: #181825;
+    border-right: 1px solid #313244;
+    display: flex;
+    flex-direction: column;
+  }
+  .tree-toolbar {
+    padding: 8px;
+    border-bottom: 1px solid #313244;
+    display: flex;
+    gap: 6px;
+  }
+  .icon-btn {
+    width: 30px;
+    height: 28px;
+    background: transparent;
+    border: 1px solid #313244;
+    border-radius: 5px;
+    color: #7f849c;
+    font-size: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+  }
+  .icon-btn.primary {
+    background: rgba(0,136,204,0.15);
+    border-color: rgba(0,136,204,0.4);
+    color: #0088CC;
+    flex: 1;
+    font-size: 11px;
+    gap: 4px;
+  }
+  .tree-section {
+    margin: 4px 6px 0;
+    font-size: 9px;
+    font-weight: 600;
+    color: #45475a;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    padding: 4px 6px;
+  }
+  .tree-node {
+    margin: 1px 4px;
+    border-radius: 6px;
+    overflow: hidden;
+  }
+  .tree-node-header {
+    padding: 6px 10px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    color: #cdd6f4;
+    font-size: 12px;
+    border-radius: 6px;
+  }
+  .tree-node-header:hover { background: #313244; }
+  .status-badge {
+    margin-left: auto;
+    font-size: 9px;
+    padding: 1px 6px;
+    border-radius: 10px;
+    background: rgba(166,227,161,0.15);
+    color: #a6e3a1;
+    border: 1px solid rgba(166,227,161,0.3);
+  }
+  .status-badge.disc {
+    background: rgba(88,91,112,0.2);
+    color: #585b70;
+    border-color: rgba(88,91,112,0.3);
+  }
+  .tree-actions {
+    display: flex;
+    gap: 2px;
+    padding: 2px 10px 4px 34px;
+  }
+  .tree-action {
+    padding: 3px 8px;
+    font-size: 10px;
+    color: #7f849c;
+    border-radius: 4px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+  .tree-action:hover { background: #313244; color: #cdd6f4; }
+  .tree-action.blue:hover { color: #0088CC; }
+  .chevron { font-size: 9px; color: #45475a; margin-left: auto; }
+</style>
+
+<div class="cards" style="gap:20px">
+
+  <!-- OPTION A: Rail + Panel -->
+  <div class="card" data-choice="a" onclick="toggleSelect(this)" style="padding:0;overflow:hidden;border-radius:10px">
+    <div class="app-shell" style="height:280px">
+      <div class="rail">
+        <div class="rail-item active" title="Conexões">🗄
+          <span class="rail-label">DB</span>
+        </div>
+        <div class="rail-item" title="Search">🔍
+          <span class="rail-label">Find</span>
+        </div>
+        <div style="flex:1"></div>
+        <div class="rail-item" title="Settings">⚙
+          <span class="rail-label">Set</span>
+        </div>
+      </div>
+      <div class="rail-panel">
+        <div class="rail-panel-header">Conexões</div>
+        <div class="rail-conn active">
+          <span class="dot"></span>prod-cluster
+        </div>
+        <div class="rail-nav-item active">📋 Topics</div>
+        <div class="rail-nav-item">✉ Messages</div>
+        <div class="rail-nav-item">🖥 Cluster</div>
+        <div style="height:8px"></div>
+        <div class="rail-conn">
+          <span class="dot grey"></span>dev-local
+        </div>
+        <div class="rail-nav-item">📋 Topics</div>
+        <div class="rail-nav-item">✉ Messages</div>
+        <div class="rail-nav-item">🖥 Cluster</div>
+      </div>
+      <div class="main-area">🗂 Área principal de conteúdo</div>
+    </div>
+    <div class="card-body">
+      <h3>A — Rail + Painel (VS Code)</h3>
+      <p>Ícone rail estreito + painel de navegação ao lado. Compacto, familiar para usuários de dev tools.</p>
+    </div>
+  </div>
+
+  <!-- OPTION B: Full sidebar -->
+  <div class="card" data-choice="b" onclick="toggleSelect(this)" style="padding:0;overflow:hidden;border-radius:10px">
+    <div class="app-shell" style="height:280px">
+      <div class="full-sidebar">
+        <div class="sidebar-header">🔀 Kawka</div>
+        <div class="add-btn">＋ Add Connection</div>
+        <div style="font-size:9px;color:#45475a;padding:4px 14px;text-transform:uppercase;letter-spacing:0.8px">Connections</div>
+        <div class="conn-group">
+          <div class="conn-header active">
+            <span class="dot"></span>prod-cluster
+            <span class="chevron">▾</span>
+          </div>
+          <div class="conn-children">
+            <div class="nav-link active">📋 Topics</div>
+            <div class="nav-link">✉ Messages</div>
+            <div class="nav-link">🖥 Cluster</div>
+          </div>
+        </div>
+        <div class="conn-group">
+          <div class="conn-header">
+            <span class="dot grey"></span>dev-local
+            <span class="chevron">▸</span>
+          </div>
+        </div>
+      </div>
+      <div class="main-area">🗂 Área principal de conteúdo</div>
+    </div>
+    <div class="card-body">
+      <h3>B — Sidebar Expandível (DBeaver)</h3>
+      <p>Sidebar mais larga com hierarquia conexão → seção. Cada conexão expande inline. Sem rail separado.</p>
+    </div>
+  </div>
+
+  <!-- OPTION C: Modernized tree -->
+  <div class="card" data-choice="c" onclick="toggleSelect(this)" style="padding:0;overflow:hidden;border-radius:10px">
+    <div class="app-shell" style="height:280px">
+      <div class="tree-sidebar">
+        <div class="tree-toolbar">
+          <div class="icon-btn primary">＋ Add Connection</div>
+          <div class="icon-btn">⚙</div>
+        </div>
+        <div class="tree-section">Connections</div>
+        <div class="tree-node">
+          <div class="tree-node-header">
+            🟢 prod-cluster
+            <span class="status-badge">live</span>
+          </div>
+          <div class="tree-actions">
+            <div class="tree-action blue">📋 Topics</div>
+            <div class="tree-action blue">✉ Msgs</div>
+            <div class="tree-action blue">🖥 Cluster</div>
+          </div>
+        </div>
+        <div class="tree-node">
+          <div class="tree-node-header">
+            ⚫ dev-local
+            <span class="status-badge disc">off</span>
+          </div>
+        </div>
+      </div>
+      <div class="main-area">🗂 Área principal de conteúdo</div>
+    </div>
+    <div class="card-body">
+      <h3>C — Árvore Modernizada (atual)</h3>
+      <p>Evolução da estrutura atual: mantém o padrão de árvore mas com ícones, status badges, e ações inline.</p>
+    </div>
+  </div>
+
+</div>
+
+<p class="subtitle" style="margin-top:16px">Clique em uma opção acima ou responda no terminal.</p>
