@@ -77,6 +77,7 @@ public class MessagesViewModel : ReactiveObject, IRoutableViewModel
         {
             this.RaiseAndSetIfChanged(ref _clientFilter, value);
             this.RaisePropertyChanged(nameof(FilteredMessages));
+            this.RaisePropertyChanged(nameof(StatusText));
         }
     }
 
@@ -86,6 +87,10 @@ public class MessagesViewModel : ReactiveObject, IRoutableViewModel
             : Messages.Where(m =>
                 (m.Value?.Contains(_clientFilter, StringComparison.OrdinalIgnoreCase) ?? false) ||
                 (m.Key?.Contains(_clientFilter, StringComparison.OrdinalIgnoreCase) ?? false));
+
+    public string StatusText =>
+        $"{_session.ProfileName}  ·  {Messages.Count} messages" +
+        (string.IsNullOrWhiteSpace(_clientFilter) ? "" : " (filtered)");
 
     private static string? FormatValue(string? raw)
     {
@@ -110,6 +115,8 @@ public class MessagesViewModel : ReactiveObject, IRoutableViewModel
         PauseCommand = ReactiveCommand.Create(PauseTail);
         StopTailCommand = ReactiveCommand.Create(StopTail);
         DismissErrorCommand = ReactiveCommand.Create(() => ErrorMessage = null);
+
+        Messages.CollectionChanged += (_, _) => this.RaisePropertyChanged(nameof(StatusText));
     }
 
     public async Task FetchMessagesAsync()
