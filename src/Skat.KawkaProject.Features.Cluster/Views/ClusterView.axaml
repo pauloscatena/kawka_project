@@ -2,64 +2,204 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:Skat.KawkaProject.Features.Cluster.ViewModels"
              x:Class="Skat.KawkaProject.Features.Cluster.Views.ClusterView"
-             x:DataType="vm:ClusterViewModel">
+             x:DataType="vm:ClusterViewModel"
+             Background="{DynamicResource BackgroundBrush}">
     <DockPanel>
-        <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Spacing="8" Margin="8">
-            <Button Command="{Binding LoadCommand}">Refresh</Button>
-        </StackPanel>
-        <Border DockPanel.Dock="Top" Background="#FFDDDD" Padding="8"
-                IsVisible="{Binding ErrorMessage, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
-            <TextBlock Text="{Binding ErrorMessage}" Foreground="DarkRed" />
+        <!-- Toolbar -->
+        <Border DockPanel.Dock="Top" Height="34"
+                Background="{DynamicResource SurfaceBrush}"
+                BorderBrush="{DynamicResource BorderSubtleBrush}"
+                BorderThickness="0,0,0,1">
+            <StackPanel Orientation="Horizontal" Spacing="8" Margin="10,0" VerticalAlignment="Center">
+                <TextBlock FontSize="11" Foreground="{DynamicResource TextMutedBrush}"
+                           VerticalAlignment="Center">🖥 Cluster</TextBlock>
+                <Border Width="1" Height="16" Background="{DynamicResource BorderBrush}" />
+                <Button Command="{Binding LoadCommand}" FontSize="11" Padding="8,4"
+                        Background="{DynamicResource SurfaceBrush}"
+                        BorderBrush="{DynamicResource BorderBrush}">↺ Refresh</Button>
+            </StackPanel>
         </Border>
-        <ProgressBar DockPanel.Dock="Top" IsIndeterminate="True" IsVisible="{Binding IsBusy}" Height="4" />
 
-        <TabControl>
+        <!-- Error bar -->
+        <Border DockPanel.Dock="Top" Padding="10,4"
+                Background="{DynamicResource DestructiveBrush}"
+                BorderBrush="{DynamicResource StatusErrorBrush}" BorderThickness="0,0,0,1"
+                IsVisible="{Binding ErrorMessage, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
+            <TextBlock Text="{Binding ErrorMessage}"
+                       Foreground="{DynamicResource StatusErrorBrush}"
+                       FontSize="11" TextWrapping="Wrap" />
+        </Border>
+
+        <!-- Progress bar -->
+        <ProgressBar DockPanel.Dock="Top" IsIndeterminate="True"
+                     IsVisible="{Binding IsBusy}" Height="3" />
+
+        <!-- Status bar -->
+        <Border DockPanel.Dock="Bottom" Height="22"
+                Background="{DynamicResource AccentBrush}">
+            <TextBlock Text="{Binding StatusText}"
+                       Foreground="#E5FFFFFF" FontSize="10"
+                       Margin="10,0" VerticalAlignment="Center" />
+        </Border>
+
+        <!-- TabControl -->
+        <TabControl Background="{DynamicResource BackgroundBrush}">
+
+            <!-- Brokers tab -->
             <TabItem Header="Brokers">
-                <ListBox ItemsSource="{Binding Brokers}">
-                    <ListBox.ItemTemplate>
-                        <DataTemplate>
-                            <Grid ColumnDefinitions="60,*,80,80">
-                                <TextBlock Grid.Column="0" Text="{Binding BrokerId}" />
-                                <TextBlock Grid.Column="1" Text="{Binding Host}" />
-                                <TextBlock Grid.Column="2" Text="{Binding Port}" />
-                                <TextBlock Grid.Column="3" Text="{Binding IsController}" />
-                            </Grid>
-                        </DataTemplate>
-                    </ListBox.ItemTemplate>
-                </ListBox>
-            </TabItem>
-
-            <TabItem Header="Consumer Groups">
-                <ListBox ItemsSource="{Binding ConsumerGroups}" SelectedItem="{Binding SelectedGroup}">
-                    <ListBox.ItemTemplate>
-                        <DataTemplate>
-                            <Grid ColumnDefinitions="*,100,60">
-                                <TextBlock Grid.Column="0" Text="{Binding GroupId}" />
-                                <TextBlock Grid.Column="1" Text="{Binding State}" />
-                                <TextBlock Grid.Column="2" Text="{Binding MemberCount}" />
-                            </Grid>
-                        </DataTemplate>
-                    </ListBox.ItemTemplate>
-                </ListBox>
-            </TabItem>
-
-            <TabItem Header="Lag">
                 <DockPanel>
-                    <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Spacing="8" Margin="8">
-                        <ComboBox ItemsSource="{Binding ConsumerGroups}" SelectedItem="{Binding SelectedGroup}"
-                                  DisplayMemberBinding="{Binding GroupId}" Width="200" />
-                        <Button Command="{Binding LoadLagCommand}">Load Lag</Button>
-                        <TextBlock VerticalAlignment="Center" Foreground="Gray">Auto-refreshes every 10s</TextBlock>
-                    </StackPanel>
-                    <ListBox ItemsSource="{Binding Lag}">
+                    <Grid DockPanel.Dock="Top" ColumnDefinitions="60,*,80,80" Height="28"
+                          Background="{DynamicResource SurfaceDeepBrush}">
+                        <TextBlock Grid.Column="0" Text="ID" Margin="8,0"
+                                   FontSize="10" FontWeight="Bold"
+                                   Foreground="{DynamicResource TextMutedBrush}" VerticalAlignment="Center" />
+                        <TextBlock Grid.Column="1" Text="HOST"
+                                   FontSize="10" FontWeight="Bold"
+                                   Foreground="{DynamicResource TextMutedBrush}" VerticalAlignment="Center" />
+                        <TextBlock Grid.Column="2" Text="PORT"
+                                   FontSize="10" FontWeight="Bold"
+                                   Foreground="{DynamicResource TextMutedBrush}" VerticalAlignment="Center" />
+                        <TextBlock Grid.Column="3" Text="CTRL"
+                                   FontSize="10" FontWeight="Bold"
+                                   Foreground="{DynamicResource TextMutedBrush}" VerticalAlignment="Center" />
+                    </Grid>
+                    <ListBox ItemsSource="{Binding Brokers}"
+                             Background="{DynamicResource BackgroundBrush}"
+                             BorderThickness="0" Padding="0">
                         <ListBox.ItemTemplate>
                             <DataTemplate>
-                                <Grid ColumnDefinitions="*,60,100,100,80">
-                                    <TextBlock Grid.Column="0" Text="{Binding Topic}" />
-                                    <TextBlock Grid.Column="1" Text="{Binding Partition}" />
-                                    <TextBlock Grid.Column="2" Text="{Binding CurrentOffset}" />
-                                    <TextBlock Grid.Column="3" Text="{Binding EndOffset}" />
-                                    <TextBlock Grid.Column="4" Text="{Binding Lag}" FontWeight="Bold" />
+                                <Grid ColumnDefinitions="60,*,80,80" Height="28" VerticalAlignment="Center">
+                                    <TextBlock Grid.Column="0" Text="{Binding BrokerId}"
+                                               Margin="8,0" FontSize="11" FontWeight="SemiBold"
+                                               Foreground="{DynamicResource AccentBrush}"
+                                               VerticalAlignment="Center" />
+                                    <TextBlock Grid.Column="1" Text="{Binding Host}"
+                                               FontSize="11"
+                                               FontFamily="Cascadia Code,JetBrains Mono,Consolas,monospace"
+                                               Foreground="{DynamicResource TextPrimaryBrush}"
+                                               VerticalAlignment="Center" />
+                                    <TextBlock Grid.Column="2" Text="{Binding Port}"
+                                               FontSize="11"
+                                               Foreground="{DynamicResource TextMutedBrush}"
+                                               VerticalAlignment="Center" />
+                                    <TextBlock Grid.Column="3" Text="{Binding IsController}"
+                                               FontSize="11"
+                                               Foreground="{DynamicResource TextMutedBrush}"
+                                               VerticalAlignment="Center" />
+                                </Grid>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                </DockPanel>
+            </TabItem>
+
+            <!-- Consumer Groups tab -->
+            <TabItem Header="Consumer Groups">
+                <DockPanel>
+                    <Grid DockPanel.Dock="Top" ColumnDefinitions="*,100,60" Height="28"
+                          Background="{DynamicResource SurfaceDeepBrush}">
+                        <TextBlock Grid.Column="0" Text="GROUP ID" Margin="8,0"
+                                   FontSize="10" FontWeight="Bold"
+                                   Foreground="{DynamicResource TextMutedBrush}" VerticalAlignment="Center" />
+                        <TextBlock Grid.Column="1" Text="STATE"
+                                   FontSize="10" FontWeight="Bold"
+                                   Foreground="{DynamicResource TextMutedBrush}" VerticalAlignment="Center" />
+                        <TextBlock Grid.Column="2" Text="MEMBERS"
+                                   FontSize="10" FontWeight="Bold"
+                                   Foreground="{DynamicResource TextMutedBrush}" VerticalAlignment="Center" />
+                    </Grid>
+                    <ListBox ItemsSource="{Binding ConsumerGroups}" SelectedItem="{Binding SelectedGroup}"
+                             Background="{DynamicResource BackgroundBrush}"
+                             BorderThickness="0" Padding="0">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate>
+                                <Grid ColumnDefinitions="*,100,60" Height="28" VerticalAlignment="Center">
+                                    <TextBlock Grid.Column="0" Text="{Binding GroupId}"
+                                               Margin="8,0" FontSize="11"
+                                               FontFamily="Cascadia Code,JetBrains Mono,Consolas,monospace"
+                                               Foreground="{DynamicResource AccentBrush}"
+                                               VerticalAlignment="Center" />
+                                    <TextBlock Grid.Column="1" Text="{Binding State}"
+                                               FontSize="11"
+                                               Foreground="{DynamicResource TextMutedBrush}"
+                                               VerticalAlignment="Center" />
+                                    <TextBlock Grid.Column="2" Text="{Binding MemberCount}"
+                                               FontSize="11" FontWeight="SemiBold"
+                                               Foreground="{DynamicResource TextPrimaryBrush}"
+                                               VerticalAlignment="Center" />
+                                </Grid>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                </DockPanel>
+            </TabItem>
+
+            <!-- Lag tab -->
+            <TabItem Header="Lag">
+                <DockPanel>
+                    <Border DockPanel.Dock="Top"
+                            Background="{DynamicResource SurfaceBrush}"
+                            BorderBrush="{DynamicResource BorderSubtleBrush}"
+                            BorderThickness="0,0,0,1"
+                            Padding="8,4">
+                        <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                            <ComboBox ItemsSource="{Binding ConsumerGroups}"
+                                      SelectedItem="{Binding SelectedGroup}"
+                                      DisplayMemberBinding="{Binding GroupId}"
+                                      Width="200" FontSize="11" />
+                            <Button Command="{Binding LoadLagCommand}" FontSize="11" Padding="8,4"
+                                    Background="{DynamicResource AccentSubtleBrush}"
+                                    BorderBrush="{DynamicResource AccentBrush}"
+                                    Foreground="{DynamicResource AccentBrush}">Load Lag</Button>
+                            <TextBlock VerticalAlignment="Center" FontSize="10"
+                                       Foreground="{DynamicResource TextFaintBrush}">Auto-refreshes every 10 s</TextBlock>
+                        </StackPanel>
+                    </Border>
+                    <Grid DockPanel.Dock="Top" ColumnDefinitions="*,60,100,100,80" Height="28"
+                          Background="{DynamicResource SurfaceDeepBrush}">
+                        <TextBlock Grid.Column="0" Text="TOPIC" Margin="8,0"
+                                   FontSize="10" FontWeight="Bold"
+                                   Foreground="{DynamicResource TextMutedBrush}" VerticalAlignment="Center" />
+                        <TextBlock Grid.Column="1" Text="PART."
+                                   FontSize="10" FontWeight="Bold"
+                                   Foreground="{DynamicResource TextMutedBrush}" VerticalAlignment="Center" />
+                        <TextBlock Grid.Column="2" Text="CURRENT"
+                                   FontSize="10" FontWeight="Bold"
+                                   Foreground="{DynamicResource TextMutedBrush}" VerticalAlignment="Center" />
+                        <TextBlock Grid.Column="3" Text="END"
+                                   FontSize="10" FontWeight="Bold"
+                                   Foreground="{DynamicResource TextMutedBrush}" VerticalAlignment="Center" />
+                        <TextBlock Grid.Column="4" Text="LAG"
+                                   FontSize="10" FontWeight="Bold"
+                                   Foreground="{DynamicResource TextMutedBrush}" VerticalAlignment="Center" />
+                    </Grid>
+                    <ListBox ItemsSource="{Binding Lag}"
+                             Background="{DynamicResource BackgroundBrush}"
+                             BorderThickness="0" Padding="0">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate>
+                                <Grid ColumnDefinitions="*,60,100,100,80" Height="28" VerticalAlignment="Center">
+                                    <TextBlock Grid.Column="0" Text="{Binding Topic}"
+                                               Margin="8,0" FontSize="11"
+                                               FontFamily="Cascadia Code,JetBrains Mono,Consolas,monospace"
+                                               Foreground="{DynamicResource AccentBrush}"
+                                               VerticalAlignment="Center" />
+                                    <TextBlock Grid.Column="1" Text="{Binding Partition}"
+                                               FontSize="11"
+                                               Foreground="{DynamicResource TextMutedBrush}"
+                                               VerticalAlignment="Center" />
+                                    <TextBlock Grid.Column="2" Text="{Binding CurrentOffset}"
+                                               FontSize="11"
+                                               Foreground="{DynamicResource TextPrimaryBrush}"
+                                               VerticalAlignment="Center" />
+                                    <TextBlock Grid.Column="3" Text="{Binding EndOffset}"
+                                               FontSize="11"
+                                               Foreground="{DynamicResource TextPrimaryBrush}"
+                                               VerticalAlignment="Center" />
+                                    <TextBlock Grid.Column="4" Text="{Binding Lag}"
+                                               FontSize="11" FontWeight="Bold"
+                                               Foreground="{DynamicResource StatusConnBrush}"
+                                               VerticalAlignment="Center" />
                                 </Grid>
                             </DataTemplate>
                         </ListBox.ItemTemplate>

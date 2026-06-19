@@ -36,6 +36,9 @@ public class ClusterViewModel : ReactiveObject, IRoutableViewModel
         }
     }
 
+    public string StatusText =>
+        $"{_session.ProfileName}  ·  {Brokers.Count} brokers  ·  {ConsumerGroups.Count} groups";
+
     public ICommand LoadCommand { get; }
     public ICommand LoadLagCommand { get; }
     public ICommand DismissErrorCommand { get; }
@@ -49,6 +52,9 @@ public class ClusterViewModel : ReactiveObject, IRoutableViewModel
         LoadCommand = ReactiveCommand.CreateFromTask(LoadAsync);
         LoadLagCommand = ReactiveCommand.CreateFromTask(LoadLagAsync);
         DismissErrorCommand = ReactiveCommand.Create(() => ErrorMessage = null);
+
+        Brokers.CollectionChanged += (_, _) => this.RaisePropertyChanged(nameof(StatusText));
+        ConsumerGroups.CollectionChanged += (_, _) => this.RaisePropertyChanged(nameof(StatusText));
 
         _autoRefresh = Observable.Interval(TimeSpan.FromSeconds(10))
             .ObserveOn(RxApp.MainThreadScheduler)
