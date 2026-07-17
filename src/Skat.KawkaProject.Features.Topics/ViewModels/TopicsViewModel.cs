@@ -12,6 +12,7 @@ public class TopicsViewModel : ReactiveObject, IRoutableViewModel
 {
     private readonly IKafkaSession _session;
     private readonly ITopicService _topicService;
+    private readonly Action<string, int> _onViewPartitionMessages;
     private bool _isBusy;
     private string? _errorMessage;
     private TopicInfo? _selectedTopic;
@@ -27,12 +28,33 @@ public class TopicsViewModel : ReactiveObject, IRoutableViewModel
     private string _newTopicName = "";
     private int _newTopicPartitions = 1;
     private int _newTopicReplicationFactor = 1;
+    private bool _isExpandingPartitions;
+    private int _newPartitionCount = 1;
+    private bool _isRecreatingTopic;
+    private int _recreatePartitionCount = 1;
+    private string _recreateConfirmName = "";
 
     public bool IsCreatingTopic { get => _isCreatingTopic; private set { this.RaiseAndSetIfChanged(ref _isCreatingTopic, value); this.RaisePropertyChanged(nameof(IsNotCreatingTopic)); } }
     public bool IsNotCreatingTopic => !_isCreatingTopic;
     public string NewTopicName { get => _newTopicName; set => this.RaiseAndSetIfChanged(ref _newTopicName, value); }
     public int NewTopicPartitions { get => _newTopicPartitions; set => this.RaiseAndSetIfChanged(ref _newTopicPartitions, value); }
     public int NewTopicReplicationFactor { get => _newTopicReplicationFactor; set => this.RaiseAndSetIfChanged(ref _newTopicReplicationFactor, value); }
+    public bool IsExpandingPartitions { get => _isExpandingPartitions; private set { this.RaiseAndSetIfChanged(ref _isExpandingPartitions, value); this.RaisePropertyChanged(nameof(IsNotExpandingPartitions)); } }
+    public bool IsNotExpandingPartitions => !_isExpandingPartitions;
+    public int NewPartitionCount { get => _newPartitionCount; set => this.RaiseAndSetIfChanged(ref _newPartitionCount, value); }
+    public bool IsRecreatingTopic { get => _isRecreatingTopic; private set { this.RaiseAndSetIfChanged(ref _isRecreatingTopic, value); this.RaisePropertyChanged(nameof(IsNotRecreatingTopic)); } }
+    public bool IsNotRecreatingTopic => !_isRecreatingTopic;
+    public int RecreatePartitionCount { get => _recreatePartitionCount; set => this.RaiseAndSetIfChanged(ref _recreatePartitionCount, value); }
+    public string RecreateConfirmName
+    {
+        get => _recreateConfirmName;
+        set
+        {
+            this.RaiseAndSetIfChanged(ref _recreateConfirmName, value);
+            this.RaisePropertyChanged(nameof(CanConfirmRecreate));
+        }
+    }
+    public bool CanConfirmRecreate => SelectedTopicDetail != null && _recreateConfirmName == SelectedTopicDetail.Topic.Name;
 
     public Interaction<string, bool> ConfirmDelete { get; } = new();
 
@@ -42,6 +64,13 @@ public class TopicsViewModel : ReactiveObject, IRoutableViewModel
     public ICommand CreateTopicCommand { get; }
     public ICommand DeleteTopicCommand { get; }
     public ICommand DismissErrorCommand { get; }
+    public ICommand ViewPartitionMessagesCommand { get; }
+    public ICommand ShowExpandFormCommand { get; }
+    public ICommand CancelExpandCommand { get; }
+    public ICommand ExpandPartitionsCommand { get; }
+    public ICommand ShowRecreateFormCommand { get; }
+    public ICommand CancelRecreateCommand { get; }
+    public ICommand RecreateTopicCommand { get; }
 
     public bool IsBusy { get => _isBusy; private set => this.RaiseAndSetIfChanged(ref _isBusy, value); }
     public string? ErrorMessage { get => _errorMessage; private set => this.RaiseAndSetIfChanged(ref _errorMessage, value); }
@@ -69,18 +98,19 @@ public class TopicsViewModel : ReactiveObject, IRoutableViewModel
     public TopicDetail? SelectedTopicDetail
     {
         get => _selectedTopicDetail;
-        private set => this.RaiseAndSetIfChanged(ref _selectedTopicDetail, value);
+        private set { this.RaiseAndSetIfChanged(ref _selectedTopicDetail, value); this.RaisePropertyChanged(nameof(CanConfirmRecreate)); }
     }
 
     public string StatusText => string.IsNullOrWhiteSpace(_filter)
         ? $"{_session.ProfileName}  ·  {_allTopics.Count} topics"
         : $"{_session.ProfileName}  ·  {Topics.Count} / {_allTopics.Count} topics";
 
-    public TopicsViewModel(IScreen hostScreen, IKafkaSession session, ITopicService topicService)
+    public TopicsViewModel(IScreen hostScreen, IKafkaSession session, ITopicService topicService, Action<string, int> onViewPartitionMessages)
     {
         HostScreen = hostScreen;
         _session = session;
         _topicService = topicService;
+        _onViewPartitionMessages = onViewPartitionMessages;
 
         LoadCommand = ReactiveCommand.CreateFromTask(LoadTopicsAsync);
         DeleteTopicCommand = ReactiveCommand.CreateFromTask<string>(DeleteTopicAsync);
@@ -88,8 +118,94 @@ public class TopicsViewModel : ReactiveObject, IRoutableViewModel
         CancelCreateCommand = ReactiveCommand.Create(() => IsCreatingTopic = false);
         CreateTopicCommand = ReactiveCommand.CreateFromTask(CreateTopicAsync);
         DismissErrorCommand = ReactiveCommand.Create(() => ErrorMessage = null);
+        ViewPartitionMessagesCommand = ReactiveCommand.Create<int>(ViewPartitionMessages);
+        ShowExpandFormCommand = ReactiveCommand.Create(() =>
+        {
+            IsExpandingPartitions = true;
+            NewPartitionCount = (SelectedTopicDetail?.Partitions.Count ?? 0) + 1;
+        });
+        CancelExpandCommand = ReactiveCommand.Create(() => IsExpandingPartitions = false);
+        ExpandPartitionsCommand = ReactiveCommand.CreateFromTask(ExpandPartitionsAsync);
+        ShowRecreateFormCommand = ReactiveCommand.Create(() =>
+        {
+            IsRecreatingTopic = true;
+            RecreateConfirmName = "";
+            RecreatePartitionCount = Math.Max(1, (SelectedTopicDetail?.Partitions.Count ?? 1) - 1);
+        });
+        CancelRecreateCommand = ReactiveCommand.Create(() => IsRecreatingTopic = false);
+        RecreateTopicCommand = ReactiveCommand.CreateFromTask(RecreateTopicAsync);
 
         _ = LoadTopicsAsync();
+    }
+
+    public async Task RecreateTopicAsync()
+    {
+        if (SelectedTopicDetail == null || !CanConfirmRecreate) return;
+        var currentCount = SelectedTopicDetail.Partitions.Count;
+        if (_recreatePartitionCount < 1 || _recreatePartitionCount >= currentCount)
+        {
+            ErrorMessage = $"New partition count must be between 1 and {currentCount - 1}.";
+            return;
+        }
+
+        var topicName = SelectedTopicDetail.Topic.Name;
+        var replicationFactor = SelectedTopicDetail.Topic.ReplicationFactor;
+        IsBusy = true;
+        ErrorMessage = null;
+        try
+        {
+            await _topicService.RecreateTopicWithFewerPartitionsAsync(_session, topicName, _recreatePartitionCount, replicationFactor);
+            IsRecreatingTopic = false;
+            await LoadTopicsAsync();
+            await LoadDetailAsync(topicName);
+        }
+        catch (Exception ex)
+        {
+            bool? stillExists = null;
+            try
+            {
+                stillExists = (await _topicService.ListTopicsAsync(_session)).Any(t => t.Name == topicName);
+            }
+            catch
+            {
+                // Existence check itself failed; fall back to the original error below.
+            }
+
+            ErrorMessage = stillExists == false
+                ? $"Topic '{topicName}' was deleted but could not be recreated: {ex.Message}. You may need to recreate it manually."
+                : ex.Message;
+        }
+        finally { IsBusy = false; }
+    }
+
+    public async Task ExpandPartitionsAsync()
+    {
+        if (SelectedTopicDetail == null) return;
+        var currentCount = SelectedTopicDetail.Partitions.Count;
+        if (_newPartitionCount <= currentCount)
+        {
+            ErrorMessage = $"New partition count must be greater than the current count ({currentCount}).";
+            return;
+        }
+
+        var topicName = SelectedTopicDetail.Topic.Name;
+        IsBusy = true;
+        ErrorMessage = null;
+        try
+        {
+            await _topicService.ExpandPartitionsAsync(_session, topicName, _newPartitionCount);
+            IsExpandingPartitions = false;
+            await LoadTopicsAsync();
+            await LoadDetailAsync(topicName);
+        }
+        catch (Exception ex) { ErrorMessage = ex.Message; }
+        finally { IsBusy = false; }
+    }
+
+    public void ViewPartitionMessages(int partition)
+    {
+        if (SelectedTopicDetail == null) return;
+        _onViewPartitionMessages(SelectedTopicDetail.Topic.Name, partition);
     }
 
     public async Task LoadTopicsAsync()

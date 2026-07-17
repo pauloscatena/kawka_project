@@ -90,7 +90,21 @@ public class ConnectionNodeViewModel : ReactiveObject
         {
             if (_session == null) return;
             shell.Router.Navigate.Execute(
-                new Skat.KawkaProject.Features.Topics.ViewModels.TopicsViewModel(shell, _session, topicService));
+                new Skat.KawkaProject.Features.Topics.ViewModels.TopicsViewModel(
+                    shell, _session, topicService,
+                    (topicName, partition) =>
+                    {
+                        if (_session == null) return;
+                        var messagesVm = new Skat.KawkaProject.Features.Messages.ViewModels.MessagesViewModel(
+                            shell, _session, messageService, topicService)
+                        {
+                            TopicName = topicName,
+                            Partition = partition,
+                            Mode = Skat.KawkaProject.Features.Messages.ViewModels.MessageMode.Offset,
+                        };
+                        shell.Router.Navigate.Execute(messagesVm);
+                        _ = messagesVm.FetchMessagesAsync();
+                    }));
         });
 
         NavigateToMessagesCommand = ReactiveCommand.Create(() =>
