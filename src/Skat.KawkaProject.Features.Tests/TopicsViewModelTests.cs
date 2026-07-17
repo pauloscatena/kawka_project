@@ -46,6 +46,7 @@ public class TopicsViewModelTests
            .Returns(Task.CompletedTask);
 
         var vm = new TopicsViewModel(FakeScreen(), FakeSession(), svc.Object);
+        vm.ConfirmDelete.RegisterHandler(ctx => ctx.SetOutput(true));
         await vm.LoadTopicsAsync();
         await vm.DeleteTopicAsync("to-delete");
 
