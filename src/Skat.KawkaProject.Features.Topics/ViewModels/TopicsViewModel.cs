@@ -98,7 +98,7 @@ public class TopicsViewModel : ReactiveObject, IRoutableViewModel
     public TopicDetail? SelectedTopicDetail
     {
         get => _selectedTopicDetail;
-        private set => this.RaiseAndSetIfChanged(ref _selectedTopicDetail, value);
+        private set { this.RaiseAndSetIfChanged(ref _selectedTopicDetail, value); this.RaisePropertyChanged(nameof(CanConfirmRecreate)); }
     }
 
     public string StatusText => string.IsNullOrWhiteSpace(_filter)
