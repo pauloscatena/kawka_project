@@ -110,10 +110,19 @@ sufficient, simpler gate than reusing the `Window`-based
 
 ## 3. View messages per partition
 
-**`TopicsViewModel` constructor** gains an `IMessageService messageService`
-parameter (stored as `_messageService`), threaded through from
-`ConnectionNodeViewModel.NavigateToTopicsCommand`, which already has
-`messageService` injected.
+`Skat.KawkaProject.Features.Topics` has no project reference to
+`Skat.KawkaProject.Features.Messages` (each feature module is only wired
+together in the UI composition root — see how `ConnectionNodeViewModel`
+constructs `MessagesViewModel`/`TopicsViewModel` from the same `shell`,
+`session`, `topicService`, `messageService`). `TopicsViewModel` must not
+gain a direct dependency on `MessagesViewModel` — that would require adding
+a cross-feature project reference the codebase doesn't have today. Instead,
+`TopicsViewModel` takes a navigation **callback** and the UI layer supplies
+the concrete `MessagesViewModel` construction.
+
+**`TopicsViewModel` constructor** gains an `Action<string, int> onViewPartitionMessages`
+parameter (stored as `_onViewPartitionMessages`), called with
+`(topicName, partition)`.
 
 **New command:**
 ```csharp
@@ -123,18 +132,33 @@ public ICommand ViewPartitionMessagesCommand { get; }
 ViewPartitionMessagesCommand = ReactiveCommand.Create<int>(partition =>
 {
     if (SelectedTopicDetail == null) return;
-    var messagesVm = new MessagesViewModel(HostScreen, _session, _messageService, _topicService)
-    {
-        TopicName = SelectedTopicDetail.Topic.Name,
-        Partition = partition,
-        Mode = MessageMode.Offset,
-    };
-    HostScreen.Router.Navigate.Execute(messagesVm);
-    _ = messagesVm.FetchMessagesAsync();
+    _onViewPartitionMessages(SelectedTopicDetail.Topic.Name, partition);
 });
 ```
-(`_session` needs to be reachable — it already is, it's the field
-`TopicsViewModel` stores today.)
+
+**`ConnectionNodeViewModel.NavigateToTopicsCommand`** supplies the callback,
+using the `messageService` it already has injected:
+```csharp
+NavigateToTopicsCommand = ReactiveCommand.Create(() =>
+{
+    if (_session == null) return;
+    shell.Router.Navigate.Execute(
+        new Skat.KawkaProject.Features.Topics.ViewModels.TopicsViewModel(
+            shell, _session, topicService,
+            (topicName, partition) =>
+            {
+                var messagesVm = new Skat.KawkaProject.Features.Messages.ViewModels.MessagesViewModel(
+                    shell, _session, messageService, topicService)
+                {
+                    TopicName = topicName,
+                    Partition = partition,
+                    Mode = Skat.KawkaProject.Features.Messages.ViewModels.MessageMode.Offset,
+                };
+                shell.Router.Navigate.Execute(messagesVm);
+                _ = messagesVm.FetchMessagesAsync();
+            }));
+});
+```
 
 **View:** in the partition `ItemsControl.ItemTemplate` in `TopicsView.axaml`,
 add a 4th column with a small "👁" button:
@@ -158,8 +182,8 @@ Adjust the partition header `Grid.ColumnDefinitions` from `30,*,*` to
 - `Skat.KawkaProject.Features.Tests/TopicsViewModelTests.cs`: add cases for
   `ExpandPartitionsCommand` (happy path + rejects count <= current),
   `RecreateTopicCommand` (gated by `CanConfirmRecreate`, rejects count
-  outside range), and `ViewPartitionMessagesCommand` (navigates and presets
-  `TopicName`/`Partition` on the pushed `MessagesViewModel`).
+  outside range), and `ViewPartitionMessagesCommand` (invokes the injected
+  callback with the selected topic's name and the clicked partition id).
 
 ## Out of scope
 
