@@ -90,4 +90,54 @@ public class TopicsViewModelTests
 
         Assert.False(called);
     }
+
+    [Fact]
+    public async Task ExpandPartitionsAsync_calls_service_and_reloads_detail()
+    {
+        var svc = new Mock<ITopicService>();
+        var detailBefore = new TopicDetail(new TopicInfo("orders", 2, 1),
+            new List<PartitionInfo> { new(0, 1, 0, 0), new(1, 1, 0, 0) });
+        var detailAfter = new TopicDetail(new TopicInfo("orders", 4, 1),
+            new List<PartitionInfo> { new(0, 1, 0, 0), new(1, 1, 0, 0), new(2, 1, 0, 0), new(3, 1, 0, 0) });
+
+        svc.Setup(s => s.ListTopicsAsync(It.IsAny<IKafkaSession>()))
+           .ReturnsAsync(new[] { new TopicInfo("orders", 2, 1) });
+        svc.SetupSequence(s => s.GetTopicDetailAsync(It.IsAny<IKafkaSession>(), "orders"))
+           .ReturnsAsync(detailBefore)
+           .ReturnsAsync(detailAfter);
+        svc.Setup(s => s.ExpandPartitionsAsync(It.IsAny<IKafkaSession>(), "orders", 4))
+           .Returns(Task.CompletedTask);
+
+        var vm = new TopicsViewModel(FakeScreen(), FakeSession(), svc.Object, NoOpNavigate);
+        await vm.LoadTopicsAsync();
+        vm.SelectedTopic = vm.Topics[0];
+        vm.NewPartitionCount = 4;
+
+        await vm.ExpandPartitionsAsync();
+
+        svc.Verify(s => s.ExpandPartitionsAsync(It.IsAny<IKafkaSession>(), "orders", 4), Times.Once);
+        Assert.Equal(4, vm.SelectedTopicDetail!.Topic.PartitionCount);
+    }
+
+    [Fact]
+    public async Task ExpandPartitionsAsync_rejects_count_not_greater_than_current()
+    {
+        var svc = new Mock<ITopicService>();
+        var detail = new TopicDetail(new TopicInfo("orders", 2, 1),
+            new List<PartitionInfo> { new(0, 1, 0, 0), new(1, 1, 0, 0) });
+        svc.Setup(s => s.ListTopicsAsync(It.IsAny<IKafkaSession>()))
+           .ReturnsAsync(new[] { new TopicInfo("orders", 2, 1) });
+        svc.Setup(s => s.GetTopicDetailAsync(It.IsAny<IKafkaSession>(), "orders"))
+           .ReturnsAsync(detail);
+
+        var vm = new TopicsViewModel(FakeScreen(), FakeSession(), svc.Object, NoOpNavigate);
+        await vm.LoadTopicsAsync();
+        vm.SelectedTopic = vm.Topics[0];
+        vm.NewPartitionCount = 2;
+
+        await vm.ExpandPartitionsAsync();
+
+        svc.Verify(s => s.ExpandPartitionsAsync(It.IsAny<IKafkaSession>(), It.IsAny<string>(), It.IsAny<int>()), Times.Never);
+        Assert.NotNull(vm.ErrorMessage);
+    }
 }

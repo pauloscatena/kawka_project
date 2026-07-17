@@ -28,12 +28,17 @@ public class TopicsViewModel : ReactiveObject, IRoutableViewModel
     private string _newTopicName = "";
     private int _newTopicPartitions = 1;
     private int _newTopicReplicationFactor = 1;
+    private bool _isExpandingPartitions;
+    private int _newPartitionCount = 1;
 
     public bool IsCreatingTopic { get => _isCreatingTopic; private set { this.RaiseAndSetIfChanged(ref _isCreatingTopic, value); this.RaisePropertyChanged(nameof(IsNotCreatingTopic)); } }
     public bool IsNotCreatingTopic => !_isCreatingTopic;
     public string NewTopicName { get => _newTopicName; set => this.RaiseAndSetIfChanged(ref _newTopicName, value); }
     public int NewTopicPartitions { get => _newTopicPartitions; set => this.RaiseAndSetIfChanged(ref _newTopicPartitions, value); }
     public int NewTopicReplicationFactor { get => _newTopicReplicationFactor; set => this.RaiseAndSetIfChanged(ref _newTopicReplicationFactor, value); }
+    public bool IsExpandingPartitions { get => _isExpandingPartitions; private set { this.RaiseAndSetIfChanged(ref _isExpandingPartitions, value); this.RaisePropertyChanged(nameof(IsNotExpandingPartitions)); } }
+    public bool IsNotExpandingPartitions => !_isExpandingPartitions;
+    public int NewPartitionCount { get => _newPartitionCount; set => this.RaiseAndSetIfChanged(ref _newPartitionCount, value); }
 
     public Interaction<string, bool> ConfirmDelete { get; } = new();
 
@@ -44,6 +49,9 @@ public class TopicsViewModel : ReactiveObject, IRoutableViewModel
     public ICommand DeleteTopicCommand { get; }
     public ICommand DismissErrorCommand { get; }
     public ICommand ViewPartitionMessagesCommand { get; }
+    public ICommand ShowExpandFormCommand { get; }
+    public ICommand CancelExpandCommand { get; }
+    public ICommand ExpandPartitionsCommand { get; }
 
     public bool IsBusy { get => _isBusy; private set => this.RaiseAndSetIfChanged(ref _isBusy, value); }
     public string? ErrorMessage { get => _errorMessage; private set => this.RaiseAndSetIfChanged(ref _errorMessage, value); }
@@ -92,8 +100,39 @@ public class TopicsViewModel : ReactiveObject, IRoutableViewModel
         CreateTopicCommand = ReactiveCommand.CreateFromTask(CreateTopicAsync);
         DismissErrorCommand = ReactiveCommand.Create(() => ErrorMessage = null);
         ViewPartitionMessagesCommand = ReactiveCommand.Create<int>(ViewPartitionMessages);
+        ShowExpandFormCommand = ReactiveCommand.Create(() =>
+        {
+            IsExpandingPartitions = true;
+            NewPartitionCount = (SelectedTopicDetail?.Partitions.Count ?? 0) + 1;
+        });
+        CancelExpandCommand = ReactiveCommand.Create(() => IsExpandingPartitions = false);
+        ExpandPartitionsCommand = ReactiveCommand.CreateFromTask(ExpandPartitionsAsync);
 
         _ = LoadTopicsAsync();
+    }
+
+    public async Task ExpandPartitionsAsync()
+    {
+        if (SelectedTopicDetail == null) return;
+        var currentCount = SelectedTopicDetail.Partitions.Count;
+        if (_newPartitionCount <= currentCount)
+        {
+            ErrorMessage = $"New partition count must be greater than the current count ({currentCount}).";
+            return;
+        }
+
+        var topicName = SelectedTopicDetail.Topic.Name;
+        IsBusy = true;
+        ErrorMessage = null;
+        try
+        {
+            await _topicService.ExpandPartitionsAsync(_session, topicName, _newPartitionCount);
+            IsExpandingPartitions = false;
+            await LoadTopicsAsync();
+            await LoadDetailAsync(topicName);
+        }
+        catch (Exception ex) { ErrorMessage = ex.Message; }
+        finally { IsBusy = false; }
     }
 
     public void ViewPartitionMessages(int partition)
