@@ -72,4 +72,57 @@ public class TopicService : ITopicService
             new PartitionsSpecification { Topic = topicName, IncreaseTo = newPartitionCount }
         });
     }
+
+    public async Task<IReadOnlyDictionary<string, string>> GetTopicConfigAsync(IKafkaSession session, string topicName)
+    {
+        using var admin = new AdminClientBuilder(AdminConfig(session)).Build();
+        var results = await admin.DescribeConfigsAsync(new[]
+        {
+            new ConfigResource { Type = ResourceType.Topic, Name = topicName }
+        });
+        return results[0].Entries.Values
+            .Where(e => !e.IsDefault)
+            .ToDictionary(e => e.Name, e => e.Value);
+    }
+
+    public async Task RecreateTopicWithFewerPartitionsAsync(
+        IKafkaSession session, string topicName, int newPartitionCount, short replicationFactor)
+    {
+        var config = await GetTopicConfigAsync(session, topicName);
+
+        using var admin = new AdminClientBuilder(AdminConfig(session)).Build();
+        await admin.DeleteTopicsAsync(new[] { topicName });
+        await WaitForTopicDeletionAsync(admin, topicName);
+
+        await admin.CreateTopicsAsync(new[]
+        {
+            new TopicSpecification
+            {
+                Name = topicName,
+                NumPartitions = newPartitionCount,
+                ReplicationFactor = replicationFactor,
+                Configs = new Dictionary<string, string>(config)
+            }
+        });
+    }
+
+    private static async Task WaitForTopicDeletionAsync(IAdminClient admin, string topicName)
+    {
+        await Task.Delay(500); // Initial delay to allow deletion to start
+        var deadline = DateTime.UtcNow.AddSeconds(30);
+        while (DateTime.UtcNow < deadline)
+        {
+            try
+            {
+                var meta = await Task.Run(() => admin.GetMetadata(TimeSpan.FromSeconds(10)));
+                if (!meta.Topics.Any(t => t.Topic == topicName)) return;
+            }
+            catch
+            {
+                // Metadata query might fail temporarily during deletion, retry
+            }
+            await Task.Delay(500);
+        }
+        throw new TimeoutException($"Timed out waiting for topic '{topicName}' deletion before recreate.");
+    }
 }

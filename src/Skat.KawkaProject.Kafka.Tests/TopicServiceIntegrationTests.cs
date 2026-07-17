@@ -1,3 +1,5 @@
+using Confluent.Kafka;
+using Confluent.Kafka.Admin;
 using Skat.KawkaProject.Core.Models;
 using Skat.KawkaProject.Kafka;
 using Testcontainers.Kafka;
@@ -46,5 +48,59 @@ public class TopicServiceIntegrationTests : IAsyncLifetime
         await svc.CreateTopicAsync(session, "detail-topic", 2, 1);
         var detail = await svc.GetTopicDetailAsync(session, "detail-topic");
         Assert.Equal(2, detail.Partitions.Count);
+    }
+
+    [Fact]
+    public async Task GetTopicConfigAsync_returns_overridden_config_values()
+    {
+        using var session = Session();
+        var adminCfg = new AdminClientConfig { BootstrapServers = _kafka.GetBootstrapAddress() };
+        using (var admin = new AdminClientBuilder(adminCfg).Build())
+        {
+            await admin.CreateTopicsAsync(new[]
+            {
+                new TopicSpecification
+                {
+                    Name = "config-topic",
+                    NumPartitions = 1,
+                    ReplicationFactor = 1,
+                    Configs = new Dictionary<string, string> { ["retention.ms"] = "3600000" }
+                }
+            });
+        }
+
+        var svc = new TopicService();
+        var config = await svc.GetTopicConfigAsync(session, "config-topic");
+
+        Assert.Equal("3600000", config["retention.ms"]);
+    }
+
+    [Fact]
+    public async Task RecreateTopicWithFewerPartitionsAsync_reduces_partitions_and_preserves_config()
+    {
+        using var session = Session();
+        var adminCfg = new AdminClientConfig { BootstrapServers = _kafka.GetBootstrapAddress() };
+        using (var admin = new AdminClientBuilder(adminCfg).Build())
+        {
+            await admin.CreateTopicsAsync(new[]
+            {
+                new TopicSpecification
+                {
+                    Name = "shrink-topic",
+                    NumPartitions = 4,
+                    ReplicationFactor = 1,
+                    Configs = new Dictionary<string, string> { ["retention.ms"] = "7200000" }
+                }
+            });
+        }
+
+        var svc = new TopicService();
+        await svc.RecreateTopicWithFewerPartitionsAsync(session, "shrink-topic", 2, 1);
+
+        var detail = await svc.GetTopicDetailAsync(session, "shrink-topic");
+        Assert.Equal(2, detail.Partitions.Count);
+
+        var config = await svc.GetTopicConfigAsync(session, "shrink-topic");
+        Assert.Equal("7200000", config["retention.ms"]);
     }
 }
