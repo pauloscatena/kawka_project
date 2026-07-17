@@ -248,7 +248,7 @@
                                        Foreground="{DynamicResource TextFaintBrush}"
                                        Margin="0,0,0,4" />
                             <!-- Partition column headers -->
-                            <Grid ColumnDefinitions="30,*,*" Margin="0,0,0,4">
+                            <Grid ColumnDefinitions="30,*,*,30" Margin="0,0,0,4">
                                 <TextBlock Grid.Column="0" Text="#"
                                            FontSize="9" FontWeight="Bold"
                                            Foreground="{DynamicResource TextFaintBrush}" />
@@ -258,11 +258,14 @@
                                 <TextBlock Grid.Column="2" Text="LATEST"
                                            FontSize="9" FontWeight="Bold"
                                            Foreground="{DynamicResource TextFaintBrush}" />
+                                <TextBlock Grid.Column="3" Text=""
+                                           FontSize="9" FontWeight="Bold"
+                                           Foreground="{DynamicResource TextFaintBrush}" />
                             </Grid>
                             <ItemsControl ItemsSource="{Binding SelectedTopicDetail.Partitions}">
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate>
-                                        <Grid ColumnDefinitions="30,*,*" Margin="0,3">
+                                        <Grid ColumnDefinitions="30,*,*,30" Margin="0,3">
                                             <TextBlock Grid.Column="0" Text="{Binding PartitionId}"
                                                        FontSize="11" FontWeight="SemiBold"
                                                        Foreground="{DynamicResource TextMutedBrush}" />
@@ -274,6 +277,13 @@
                                                        FontSize="11"
                                                        FontFamily="Cascadia Code,JetBrains Mono,Consolas,monospace"
                                                        Foreground="{DynamicResource StatusLiveBrush}" />
+                                            <Button Grid.Column="3" Content="👁"
+                                                    Command="{Binding DataContext.ViewPartitionMessagesCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                    CommandParameter="{Binding PartitionId}"
+                                                    FontSize="11" Padding="4,0" MinWidth="0"
+                                                    Background="Transparent" BorderThickness="0"
+                                                    Foreground="{DynamicResource AccentBrush}"
+                                                    ToolTip.Tip="View messages" />
                                         </Grid>
                                     </DataTemplate>
                                 </ItemsControl.ItemTemplate>
