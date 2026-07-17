@@ -110,6 +110,7 @@ public class TopicService : ITopicService
     {
         await Task.Delay(500); // Initial delay to allow deletion to start
         var deadline = DateTime.UtcNow.AddSeconds(30);
+        Exception? lastException = null;
         while (DateTime.UtcNow < deadline)
         {
             try
@@ -117,12 +118,13 @@ public class TopicService : ITopicService
                 var meta = await Task.Run(() => admin.GetMetadata(TimeSpan.FromSeconds(10)));
                 if (!meta.Topics.Any(t => t.Topic == topicName)) return;
             }
-            catch
+            catch (Exception ex)
             {
                 // Metadata query might fail temporarily during deletion, retry
+                lastException = ex;
             }
             await Task.Delay(500);
         }
-        throw new TimeoutException($"Timed out waiting for topic '{topicName}' deletion before recreate.");
+        throw new TimeoutException($"Timed out waiting for topic '{topicName}' deletion before recreate.", lastException);
     }
 }

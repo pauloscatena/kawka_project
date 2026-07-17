@@ -159,7 +159,22 @@ public class TopicsViewModel : ReactiveObject, IRoutableViewModel
             await LoadTopicsAsync();
             await LoadDetailAsync(topicName);
         }
-        catch (Exception ex) { ErrorMessage = ex.Message; }
+        catch (Exception ex)
+        {
+            bool? stillExists = null;
+            try
+            {
+                stillExists = (await _topicService.ListTopicsAsync(_session)).Any(t => t.Name == topicName);
+            }
+            catch
+            {
+                // Existence check itself failed; fall back to the original error below.
+            }
+
+            ErrorMessage = stillExists == false
+                ? $"Topic '{topicName}' was deleted but could not be recreated: {ex.Message}. You may need to recreate it manually."
+                : ex.Message;
+        }
         finally { IsBusy = false; }
     }
 
