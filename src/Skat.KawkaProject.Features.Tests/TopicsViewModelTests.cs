@@ -8,6 +8,8 @@ namespace Skat.KawkaProject.Features.Tests;
 
 public class TopicsViewModelTests
 {
+    private static readonly Action<string, int> NoOpNavigate = (_, _) => { };
+
     private static IScreen FakeScreen()
     {
         var mock = new Mock<IScreen>();
@@ -29,7 +31,7 @@ public class TopicsViewModelTests
         svc.Setup(s => s.ListTopicsAsync(It.IsAny<IKafkaSession>()))
            .ReturnsAsync(new[] { new TopicInfo("orders", 3, 1) });
 
-        var vm = new TopicsViewModel(FakeScreen(), FakeSession(), svc.Object);
+        var vm = new TopicsViewModel(FakeScreen(), FakeSession(), svc.Object, NoOpNavigate);
         await vm.LoadTopicsAsync();
 
         Assert.Single(vm.Topics);
@@ -45,10 +47,47 @@ public class TopicsViewModelTests
         svc.Setup(s => s.DeleteTopicAsync(It.IsAny<IKafkaSession>(), "to-delete"))
            .Returns(Task.CompletedTask);
 
-        var vm = new TopicsViewModel(FakeScreen(), FakeSession(), svc.Object);
+        var vm = new TopicsViewModel(FakeScreen(), FakeSession(), svc.Object, NoOpNavigate);
         await vm.LoadTopicsAsync();
         await vm.DeleteTopicAsync("to-delete");
 
         svc.Verify(s => s.DeleteTopicAsync(It.IsAny<IKafkaSession>(), "to-delete"), Times.Once);
+    }
+
+    [Fact]
+    public async Task ViewPartitionMessages_invokes_callback_with_selected_topic_and_partition()
+    {
+        var svc = new Mock<ITopicService>();
+        svc.Setup(s => s.ListTopicsAsync(It.IsAny<IKafkaSession>()))
+           .ReturnsAsync(new[] { new TopicInfo("orders", 2, 1) });
+        svc.Setup(s => s.GetTopicDetailAsync(It.IsAny<IKafkaSession>(), "orders"))
+           .ReturnsAsync(new TopicDetail(
+               new TopicInfo("orders", 2, 1),
+               new List<PartitionInfo> { new(0, 1, 0, 10), new(1, 1, 0, 5) }));
+
+        string? capturedTopic = null;
+        int? capturedPartition = null;
+        var vm = new TopicsViewModel(FakeScreen(), FakeSession(), svc.Object,
+            (topic, partition) => { capturedTopic = topic; capturedPartition = partition; });
+
+        await vm.LoadTopicsAsync();
+        vm.SelectedTopic = vm.Topics[0];
+        vm.ViewPartitionMessages(1);
+
+        Assert.Equal("orders", capturedTopic);
+        Assert.Equal(1, capturedPartition);
+    }
+
+    [Fact]
+    public void ViewPartitionMessages_does_nothing_when_no_topic_selected()
+    {
+        var svc = new Mock<ITopicService>();
+        var called = false;
+        var vm = new TopicsViewModel(FakeScreen(), FakeSession(), svc.Object,
+            (_, _) => called = true);
+
+        vm.ViewPartitionMessages(0);
+
+        Assert.False(called);
     }
 }

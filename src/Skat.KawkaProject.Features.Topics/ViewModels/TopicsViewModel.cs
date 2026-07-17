@@ -12,6 +12,7 @@ public class TopicsViewModel : ReactiveObject, IRoutableViewModel
 {
     private readonly IKafkaSession _session;
     private readonly ITopicService _topicService;
+    private readonly Action<string, int> _onViewPartitionMessages;
     private bool _isBusy;
     private string? _errorMessage;
     private TopicInfo? _selectedTopic;
@@ -42,6 +43,7 @@ public class TopicsViewModel : ReactiveObject, IRoutableViewModel
     public ICommand CreateTopicCommand { get; }
     public ICommand DeleteTopicCommand { get; }
     public ICommand DismissErrorCommand { get; }
+    public ICommand ViewPartitionMessagesCommand { get; }
 
     public bool IsBusy { get => _isBusy; private set => this.RaiseAndSetIfChanged(ref _isBusy, value); }
     public string? ErrorMessage { get => _errorMessage; private set => this.RaiseAndSetIfChanged(ref _errorMessage, value); }
@@ -76,11 +78,12 @@ public class TopicsViewModel : ReactiveObject, IRoutableViewModel
         ? $"{_session.ProfileName}  ·  {_allTopics.Count} topics"
         : $"{_session.ProfileName}  ·  {Topics.Count} / {_allTopics.Count} topics";
 
-    public TopicsViewModel(IScreen hostScreen, IKafkaSession session, ITopicService topicService)
+    public TopicsViewModel(IScreen hostScreen, IKafkaSession session, ITopicService topicService, Action<string, int> onViewPartitionMessages)
     {
         HostScreen = hostScreen;
         _session = session;
         _topicService = topicService;
+        _onViewPartitionMessages = onViewPartitionMessages;
 
         LoadCommand = ReactiveCommand.CreateFromTask(LoadTopicsAsync);
         DeleteTopicCommand = ReactiveCommand.CreateFromTask<string>(DeleteTopicAsync);
@@ -88,8 +91,15 @@ public class TopicsViewModel : ReactiveObject, IRoutableViewModel
         CancelCreateCommand = ReactiveCommand.Create(() => IsCreatingTopic = false);
         CreateTopicCommand = ReactiveCommand.CreateFromTask(CreateTopicAsync);
         DismissErrorCommand = ReactiveCommand.Create(() => ErrorMessage = null);
+        ViewPartitionMessagesCommand = ReactiveCommand.Create<int>(ViewPartitionMessages);
 
         _ = LoadTopicsAsync();
+    }
+
+    public void ViewPartitionMessages(int partition)
+    {
+        if (SelectedTopicDetail == null) return;
+        _onViewPartitionMessages(SelectedTopicDetail.Topic.Name, partition);
     }
 
     public async Task LoadTopicsAsync()
