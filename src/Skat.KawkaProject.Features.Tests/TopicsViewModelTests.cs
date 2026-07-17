@@ -140,4 +140,69 @@ public class TopicsViewModelTests
         svc.Verify(s => s.ExpandPartitionsAsync(It.IsAny<IKafkaSession>(), It.IsAny<string>(), It.IsAny<int>()), Times.Never);
         Assert.NotNull(vm.ErrorMessage);
     }
+
+    [Fact]
+    public async Task RecreateTopicAsync_calls_service_when_confirmed_and_in_range()
+    {
+        var svc = new Mock<ITopicService>();
+        var detail = new TopicDetail(new TopicInfo("orders", 4, 1),
+            new List<PartitionInfo> { new(0, 1, 0, 0), new(1, 1, 0, 0), new(2, 1, 0, 0), new(3, 1, 0, 0) });
+        svc.Setup(s => s.ListTopicsAsync(It.IsAny<IKafkaSession>())).ReturnsAsync(new[] { new TopicInfo("orders", 4, 1) });
+        svc.Setup(s => s.GetTopicDetailAsync(It.IsAny<IKafkaSession>(), "orders")).ReturnsAsync(detail);
+        svc.Setup(s => s.RecreateTopicWithFewerPartitionsAsync(It.IsAny<IKafkaSession>(), "orders", 2, 1))
+           .Returns(Task.CompletedTask);
+
+        var vm = new TopicsViewModel(FakeScreen(), FakeSession(), svc.Object, NoOpNavigate);
+        await vm.LoadTopicsAsync();
+        vm.SelectedTopic = vm.Topics[0];
+        vm.RecreateConfirmName = "orders";
+        vm.RecreatePartitionCount = 2;
+
+        await vm.RecreateTopicAsync();
+
+        svc.Verify(s => s.RecreateTopicWithFewerPartitionsAsync(It.IsAny<IKafkaSession>(), "orders", 2, 1), Times.Once);
+    }
+
+    [Fact]
+    public async Task RecreateTopicAsync_does_nothing_when_confirm_name_does_not_match()
+    {
+        var svc = new Mock<ITopicService>();
+        var detail = new TopicDetail(new TopicInfo("orders", 4, 1),
+            new List<PartitionInfo> { new(0, 1, 0, 0), new(1, 1, 0, 0), new(2, 1, 0, 0), new(3, 1, 0, 0) });
+        svc.Setup(s => s.ListTopicsAsync(It.IsAny<IKafkaSession>())).ReturnsAsync(new[] { new TopicInfo("orders", 4, 1) });
+        svc.Setup(s => s.GetTopicDetailAsync(It.IsAny<IKafkaSession>(), "orders")).ReturnsAsync(detail);
+
+        var vm = new TopicsViewModel(FakeScreen(), FakeSession(), svc.Object, NoOpNavigate);
+        await vm.LoadTopicsAsync();
+        vm.SelectedTopic = vm.Topics[0];
+        vm.RecreateConfirmName = "wrong-name";
+        vm.RecreatePartitionCount = 2;
+
+        await vm.RecreateTopicAsync();
+
+        svc.Verify(s => s.RecreateTopicWithFewerPartitionsAsync(
+            It.IsAny<IKafkaSession>(), It.IsAny<string>(), It.IsAny<int>(), It.IsAny<short>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task RecreateTopicAsync_rejects_count_outside_valid_range()
+    {
+        var svc = new Mock<ITopicService>();
+        var detail = new TopicDetail(new TopicInfo("orders", 4, 1),
+            new List<PartitionInfo> { new(0, 1, 0, 0), new(1, 1, 0, 0), new(2, 1, 0, 0), new(3, 1, 0, 0) });
+        svc.Setup(s => s.ListTopicsAsync(It.IsAny<IKafkaSession>())).ReturnsAsync(new[] { new TopicInfo("orders", 4, 1) });
+        svc.Setup(s => s.GetTopicDetailAsync(It.IsAny<IKafkaSession>(), "orders")).ReturnsAsync(detail);
+
+        var vm = new TopicsViewModel(FakeScreen(), FakeSession(), svc.Object, NoOpNavigate);
+        await vm.LoadTopicsAsync();
+        vm.SelectedTopic = vm.Topics[0];
+        vm.RecreateConfirmName = "orders";
+        vm.RecreatePartitionCount = 4;
+
+        await vm.RecreateTopicAsync();
+
+        svc.Verify(s => s.RecreateTopicWithFewerPartitionsAsync(
+            It.IsAny<IKafkaSession>(), It.IsAny<string>(), It.IsAny<int>(), It.IsAny<short>()), Times.Never);
+        Assert.NotNull(vm.ErrorMessage);
+    }
 }
