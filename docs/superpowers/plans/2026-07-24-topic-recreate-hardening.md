@@ -253,12 +253,64 @@ Em `Skat.KawkaProject.Kafka.Tests/TopicServiceIntegrationTests.cs`, substituir o
         var config = await svc.GetTopicConfigOverridesAsync(session, "config-topic");
 
         Assert.Equal("604800000", config["retention.ms"]);
-        // Broker-level and built-in defaults must NOT leak in as topic-level overrides:
-        // pinning them here would freeze the topic against future cluster-wide changes.
-        Assert.DoesNotContain("log.retention.hours", config.Keys);
-        Assert.DoesNotContain("num.partitions", config.Keys);
-        Assert.True(config.Count < 5,
-            $"Expected only explicit overrides, got {config.Count} entries: {string.Join(", ", config.Keys)}");
+    }
+```
+
+> **Corrigido após a revisão de QA desta task.** A versão anterior deste passo prescrevia três
+> asserções que **não detectariam o bug**, todas verificadas contra broker real:
+> `Assert.DoesNotContain("log.retention.hours", …)` e `Assert.DoesNotContain("num.partitions", …)`
+> passam com qualquer filtro, inclusive sem filtro nenhum — nenhuma das duas chaves aparece no
+> `DescribeConfigs` de um recurso `Topic` (são nomes de config de broker); e `Assert.True(config.Count < 5)`
+> passava com o filtro antigo, que devolvia exatamente 2 entradas. O passo teria ficado "verde"
+> mantendo o defeito.
+>
+> A asserção que **de fato** prende o comportamento é a contagem zero num tópico virgem, mais um
+> tópico virgem sob config dinâmico de broker. Ambos abaixo.
+
+Adicionar também os dois testes que prendem o vazamento — sem eles, mutações como
+`.Where(e => !e.IsDefault && e.Source != ConfigSource.StaticBrokerConfig)` mantêm a suíte inteira
+verde e reintroduzem o bug em produção (verificado):
+
+```csharp
+    [Fact]
+    public async Task GetTopicConfigOverridesAsync_returns_nothing_when_the_topic_overrides_nothing()
+    {
+        using var session = Session();
+        var svc = new TopicService();
+        await svc.CreateTopicAsync(session, "plain-topic", 1, 1);
+
+        var config = await svc.GetTopicConfigOverridesAsync(session, "plain-topic");
+
+        Assert.True(config.Count == 0,
+            $"Expected no overrides, got {config.Count}: {string.Join(", ", config.Select(kv => $"{kv.Key}={kv.Value}"))}");
+    }
+
+    [Fact]
+    public async Task GetTopicConfigOverridesAsync_ignores_config_inherited_from_dynamic_broker_settings()
+    {
+        using var session = Session();
+        var svc = new TopicService();
+
+        var adminCfg = new AdminClientConfig { BootstrapServers = _kafka.GetBootstrapAddress() };
+        using (var admin = new AdminClientBuilder(adminCfg).Build())
+        {
+            await admin.IncrementalAlterConfigsAsync(new Dictionary<ConfigResource, List<ConfigEntry>>
+            {
+                [new ConfigResource { Type = ResourceType.Broker, Name = "1" }] = new()
+                {
+                    new ConfigEntry { Name = "log.retention.ms", Value = "111111111",
+                                      IncrementalOperation = AlterConfigOpType.Set },
+                    new ConfigEntry { Name = "log.cleanup.policy", Value = "compact",
+                                      IncrementalOperation = AlterConfigOpType.Set }
+                }
+            });
+        }
+
+        await svc.CreateTopicAsync(session, "inherits-topic", 1, 1);
+        var config = await svc.GetTopicConfigOverridesAsync(session, "inherits-topic");
+
+        Assert.True(config.Count == 0,
+            $"Expected no overrides, got {config.Count}: {string.Join(", ", config.Select(kv => $"{kv.Key}={kv.Value}"))}");
     }
 ```
 

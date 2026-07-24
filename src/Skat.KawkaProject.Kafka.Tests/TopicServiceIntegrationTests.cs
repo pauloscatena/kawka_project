@@ -51,7 +51,64 @@ public class TopicServiceIntegrationTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task GetTopicConfigAsync_returns_overridden_config_values()
+    public async Task GetTopicConfigOverridesAsync_returns_nothing_when_the_topic_overrides_nothing()
+    {
+        using var session = Session();
+        var svc = new TopicService();
+        await svc.CreateTopicAsync(session, "plain-topic", 1, 1);
+
+        var config = await svc.GetTopicConfigOverridesAsync(session, "plain-topic");
+
+        // Values inherited from the broker's server.properties report a source of
+        // StaticBrokerConfig, not DefaultConfig, so an !IsDefault filter lets them through and
+        // the recreate path would write them back as permanent topic-level overrides - freezing
+        // the topic against any future cluster-wide change.
+        Assert.True(config.Count == 0,
+            $"Expected no overrides, got {config.Count}: {string.Join(", ", config.Select(kv => $"{kv.Key}={kv.Value}"))}");
+    }
+
+    [Fact]
+    public async Task GetTopicConfigOverridesAsync_ignores_config_inherited_from_dynamic_broker_settings()
+    {
+        using var session = Session();
+        var svc = new TopicService();
+
+        var adminCfg = new AdminClientConfig { BootstrapServers = _kafka.GetBootstrapAddress() };
+        using (var admin = new AdminClientBuilder(adminCfg).Build())
+        {
+            // What an operator does with `kafka-configs --entity-type brokers --alter`. These land
+            // as DynamicBrokerConfig with IsDefault=false, so they are the highest-impact leak:
+            // pinning them onto a topic freezes it against every later cluster-wide change.
+            await admin.IncrementalAlterConfigsAsync(new Dictionary<ConfigResource, List<ConfigEntry>>
+            {
+                [new ConfigResource { Type = ResourceType.Broker, Name = "1" }] = new()
+                {
+                    new ConfigEntry
+                    {
+                        Name = "log.retention.ms", Value = "111111111",
+                        IncrementalOperation = AlterConfigOpType.Set
+                    },
+                    new ConfigEntry
+                    {
+                        Name = "log.cleanup.policy", Value = "compact",
+                        IncrementalOperation = AlterConfigOpType.Set
+                    }
+                }
+            });
+        }
+
+        await svc.CreateTopicAsync(session, "inherits-topic", 1, 1);
+
+        var config = await svc.GetTopicConfigOverridesAsync(session, "inherits-topic");
+
+        // Guards the mutation `.Where(e => !e.IsDefault && e.Source != StaticBrokerConfig)`, which
+        // passes every other test in this suite while reintroducing the bug on any real cluster.
+        Assert.True(config.Count == 0,
+            $"Expected no overrides, got {config.Count}: {string.Join(", ", config.Select(kv => $"{kv.Key}={kv.Value}"))}");
+    }
+
+    [Fact]
+    public async Task GetTopicConfigOverridesAsync_returns_overridden_config_values()
     {
         using var session = Session();
         var adminCfg = new AdminClientConfig { BootstrapServers = _kafka.GetBootstrapAddress() };
@@ -70,7 +127,7 @@ public class TopicServiceIntegrationTests : IAsyncLifetime
         }
 
         var svc = new TopicService();
-        var config = await svc.GetTopicConfigAsync(session, "config-topic");
+        var config = await svc.GetTopicConfigOverridesAsync(session, "config-topic");
 
         Assert.Equal("3600000", config["retention.ms"]);
     }
@@ -89,7 +146,13 @@ public class TopicServiceIntegrationTests : IAsyncLifetime
                     Name = "shrink-topic",
                     NumPartitions = 4,
                     ReplicationFactor = 1,
-                    Configs = new Dictionary<string, string> { ["retention.ms"] = "7200000" }
+                    Configs = new Dictionary<string, string>
+                    {
+                        ["retention.ms"] = "7200000",
+                        // Explicitly set, but its value equals the cluster default. A filter that
+                        // compared VALUES instead of sources would silently drop this one.
+                        ["min.insync.replicas"] = "1"
+                    }
                 }
             });
         }
@@ -100,8 +163,9 @@ public class TopicServiceIntegrationTests : IAsyncLifetime
         var detail = await svc.GetTopicDetailAsync(session, "shrink-topic");
         Assert.Equal(2, detail.Partitions.Count);
 
-        var config = await svc.GetTopicConfigAsync(session, "shrink-topic");
+        var config = await svc.GetTopicConfigOverridesAsync(session, "shrink-topic");
         Assert.Equal("7200000", config["retention.ms"]);
+        Assert.Equal("1", config["min.insync.replicas"]);
     }
 
     [Theory]

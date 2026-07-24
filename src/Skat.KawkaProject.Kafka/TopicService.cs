@@ -73,15 +73,25 @@ public class TopicService : ITopicService
         });
     }
 
-    public async Task<IReadOnlyDictionary<string, string>> GetTopicConfigAsync(IKafkaSession session, string topicName)
+    public async Task<IReadOnlyDictionary<string, string>> GetTopicConfigOverridesAsync(IKafkaSession session, string topicName)
     {
         using var admin = new AdminClientBuilder(AdminConfig(session)).Build();
         var results = await admin.DescribeConfigsAsync(new[]
         {
             new ConfigResource { Type = ResourceType.Topic, Name = topicName }
         });
+        // Filter on Source, never on IsDefault. IsDefault is NOT a value comparison - it means
+        // "Source == DefaultConfig". An override set explicitly on the topic reports IsDefault
+        // false even when its value happens to equal the default (measured: min.insync.replicas=1
+        // set via CreateTopics reports DynamicTopicConfig / IsDefault=false).
+        //
+        // So !IsDefault lets through everything the topic merely INHERITS: StaticBrokerConfig
+        // (server.properties) and DynamicBrokerConfig (kafka-configs --entity-type brokers).
+        // Carrying those into the recreate writes them back as explicit topic-level overrides,
+        // freezing that topic against every future cluster-wide change.
+        // Only DynamicTopicConfig means "somebody set this on this topic".
         return results[0].Entries.Values
-            .Where(e => !e.IsDefault)
+            .Where(e => e.Source == ConfigSource.DynamicTopicConfig)
             .ToDictionary(e => e.Name, e => e.Value);
     }
 
@@ -113,7 +123,7 @@ public class TopicService : ITopicService
                 $"{currentCount} partitions, and this operation only reduces the partition count.");
         }
 
-        var config = await GetTopicConfigAsync(session, topicName);
+        var config = await GetTopicConfigOverridesAsync(session, topicName);
 
         await admin.DeleteTopicsAsync(new[] { topicName });
         await WaitForTopicDeletionAsync(admin, topicName);
