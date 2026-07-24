@@ -8,6 +8,13 @@
 
 **Tech Stack:** .NET 10, Avalonia 11.3.9 + ReactiveUI 20.1.1, Confluent.Kafka 2.3.0, xUnit 2.9.3 + Moq 4.20.72 (unit), Testcontainers.Kafka 4.4.0 (integração, exige Docker local).
 
+## Pendências de verificação registradas (revisões de QA)
+
+- **Smoke test manual da UI** (QA Task 6, OBS-1): `ReselectTopicByName` existe para o caminho em que o `ListBox` escreve `null` de volta em `SelectedTopic` durante `ApplyFilter` — que só ocorre com o Avalonia rodando. Os testes unitários só alcançam a variante *stale*, então esse caminho fica coberto apenas por teste manual: recriar um tópico com sucesso e confirmar que a linha segue destacada no `ListBox` e o painel coerente.
+- **Navegação durante operação** (QA Task 6, OBS-2): sem gating na `ListBox`, clicar em outro tópico durante um recreate tem a seleção revertida ao concluir. **Mitigado pela Task 7** (travar comandos/lista durante operação).
+- **Broker com ACL / delete recusado** (QA Tasks 4-5): a classificação `Error.IsLocalError` que decide `TopicMayBeDeleted` não foi exercitada contra ACL real — o container de teste não tem ACLs. Aproximada por outros códigos de erro do broker.
+- **Versões de broker** (QA Tasks 2-3): tudo medido contra `cp-kafka:6.1.9` single-node (Kafka 2.7, ZooKeeper). KRaft, Kafka 3.x/4.x e multi-broker não foram medidos.
+
 ## Global Constraints
 
 - Target framework: `net10.0` em todos os projetos (já configurado — não alterar).

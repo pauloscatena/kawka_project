@@ -159,10 +159,12 @@ public class TopicsViewModel : ReactiveObject, IRoutableViewModel
             IsRecreatingTopic = false;
             await LoadTopicsAsync();
             await LoadDetailAsync(topicName);
+            ReselectTopicByName(topicName);
         }
         catch (TopicRecreateFailedException ex)
         {
             ErrorMessage = BuildRecreateFailureMessage(ex);
+            if (ex.TopicMayBeDeleted) await ResyncAfterPossibleDeletionAsync(topicName);
 
             // Close the form when the topic may be gone. Leaving it open leaves a primed
             // destructive button beside an already-typed confirmation name, and the next click
@@ -176,6 +178,68 @@ public class TopicsViewModel : ReactiveObject, IRoutableViewModel
             ErrorMessage = ex.Message;
         }
         finally { IsBusy = false; }
+    }
+
+    /// <summary>
+    /// Re-points SelectedTopic at the refreshed TopicInfo instance.
+    /// </summary>
+    /// <remarks>
+    /// ApplyFilter clears the ObservableCollection, which makes the ListBox set SelectedIndex to -1
+    /// and write null back through the two-way binding. The re-added item does not restore it
+    /// either: TopicInfo is a record with value equality, and the partition count just changed, so
+    /// TopicInfo("orders", 2, 1) is not equal to TopicInfo("orders", 4, 1).
+    ///
+    /// Without this the detail panel stays open showing the topic while SelectedTopic is null, and
+    /// the delete button - whose CommandParameter reads from the selection - fires with a null name.
+    /// Assigning the backing field directly rather than the property avoids re-triggering the
+    /// setter's fire-and-forget detail load, which LoadDetailAsync has just done.
+    ///
+    /// Coverage note: the unit test for this can only reach the STALE-selection variant (no ListBox
+    /// to write null back), so the null-write-back path this method exists for is verified only by
+    /// a manual smoke test in the running Avalonia UI. If the ListBox's null write-back is deferred
+    /// past this call, this would need to re-run after it - not reproducible headless.
+    /// </remarks>
+    private void ReselectTopicByName(string topicName)
+    {
+        var refreshed = Topics.FirstOrDefault(t => t.Name == topicName);
+        if (refreshed is null) return;
+
+        _selectedTopic = refreshed;
+        this.RaisePropertyChanged(nameof(SelectedTopic));
+    }
+
+    /// <summary>
+    /// After a failure that may have deleted the topic, refresh the list so the UI stops offering
+    /// actions on something that no longer exists.
+    /// </summary>
+    /// <remarks>
+    /// The previous code fetched this same list purely to compute a bool and threw the result away,
+    /// leaving Delete / Increase / Recreate live on a destroyed topic.
+    /// </remarks>
+    private async Task ResyncAfterPossibleDeletionAsync(string topicName)
+    {
+        try
+        {
+            _allTopics = (await _topicService.ListTopicsAsync(_session)).ToList();
+            ApplyFilter();
+
+            if (_allTopics.Any(t => t.Name == topicName))
+            {
+                // Deletion had not propagated yet. The warning stands, but the topic is still there
+                // and the user should not be shown an empty panel as if it had vanished.
+                ReselectTopicByName(topicName);
+                return;
+            }
+
+            _selectedTopic = null;
+            this.RaisePropertyChanged(nameof(SelectedTopic));
+            SelectedTopicDetail = null;
+        }
+        catch
+        {
+            // The refresh failed too - most likely the same outage that broke the recreate. Keep
+            // the data-loss message already in ErrorMessage; it is the one that matters.
+        }
     }
 
     /// <summary>

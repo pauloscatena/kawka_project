@@ -274,6 +274,99 @@ public class TopicsViewModelTests
     }
 
     [Fact]
+    public async Task A_successful_recreate_reselects_the_refreshed_topic()
+    {
+        // Mutable cluster state rather than SetupSequence: the VM constructor fires a
+        // fire-and-forget LoadTopicsAsync, so a sequence is already partly consumed before the
+        // test body runs and the assertions end up describing the wrong phase.
+        var clusterTopics = new[] { new TopicInfo("orders", 4, 1) };
+        var clusterDetail = new TopicDetail(new TopicInfo("orders", 4, 1),
+            new List<PartitionInfo> { new(0, 1, 0, 0), new(1, 1, 0, 0), new(2, 1, 0, 0), new(3, 1, 0, 0) });
+
+        var svc = new Mock<ITopicService>();
+        svc.Setup(s => s.ListTopicsAsync(It.IsAny<IKafkaSession>())).ReturnsAsync(() => clusterTopics);
+        svc.Setup(s => s.GetTopicDetailAsync(It.IsAny<IKafkaSession>(), "orders")).ReturnsAsync(() => clusterDetail);
+        svc.Setup(s => s.RecreateTopicWithFewerPartitionsAsync(It.IsAny<IKafkaSession>(), "orders", 2, (short)1))
+           .Callback(() =>
+           {
+               clusterTopics = new[] { new TopicInfo("orders", 2, 1) };
+               clusterDetail = new TopicDetail(new TopicInfo("orders", 2, 1),
+                   new List<PartitionInfo> { new(0, 1, 0, 0), new(1, 1, 0, 0) });
+           })
+           .Returns(Task.CompletedTask);
+
+        var vm = new TopicsViewModel(FakeScreen(), FakeSession(), svc.Object, NoOpNavigate);
+        await vm.LoadTopicsAsync();
+        vm.SelectedTopic = vm.Topics[0];
+        Assert.Equal(4, vm.SelectedTopic!.PartitionCount);
+
+        vm.ShowRecreateFormCommand.Execute(null);
+        vm.RecreateConfirmName = "orders";
+        vm.RecreatePartitionCount = 2;
+
+        await vm.RecreateTopicAsync();
+
+        // ApplyFilter clears the ObservableCollection, so the ListBox writes null back through the
+        // two-way binding; the re-added TopicInfo is a different record value (the partition count
+        // changed) so it is never auto-reselected. Without an explicit reselect the detail panel
+        // stays open with SelectedTopic null.
+        Assert.NotNull(vm.SelectedTopic);
+        Assert.Equal("orders", vm.SelectedTopic!.Name);
+        Assert.Equal(2, vm.SelectedTopic.PartitionCount);
+    }
+
+    [Fact]
+    public async Task A_failed_recreate_drops_the_topic_from_the_list_when_it_is_really_gone()
+    {
+        // The recreate destroys the topic and then fails, so the cluster really is left without it.
+        var clusterTopics = new[] { new TopicInfo("orders", 4, 3) };
+
+        var svc = new Mock<ITopicService>();
+        svc.Setup(s => s.ListTopicsAsync(It.IsAny<IKafkaSession>())).ReturnsAsync(() => clusterTopics);
+        svc.Setup(s => s.GetTopicDetailAsync(It.IsAny<IKafkaSession>(), "orders"))
+           .ReturnsAsync(new TopicDetail(new TopicInfo("orders", 4, 3),
+               new List<PartitionInfo> { new(0, 1, 0, 0), new(1, 1, 0, 0), new(2, 1, 0, 0), new(3, 1, 0, 0) }));
+        svc.Setup(s => s.RecreateTopicWithFewerPartitionsAsync(It.IsAny<IKafkaSession>(), "orders", 2, (short)3))
+           .Callback(() => clusterTopics = Array.Empty<TopicInfo>())
+           .ThrowsAsync(new TopicRecreateFailedException(
+               TopicRecreateStage.Creating, topicMayBeDeleted: true, FailedAttempt(),
+               "Topic 'orders' was deleted but could not be recreated: broker down.",
+               new InvalidOperationException("broker down")));
+
+        var vm = await RecreateAndReturnVm(svc);
+
+        // The old code fetched the list purely to compute a bool and threw the result away, so the
+        // UI kept offering Delete / Expand / Recreate on a topic that no longer existed.
+        Assert.Empty(vm.Topics);
+        Assert.Null(vm.SelectedTopicDetail);
+        Assert.Null(vm.SelectedTopic);
+        Assert.Contains("DATA LOSS RISK", vm.ErrorMessage);
+    }
+
+    [Fact]
+    public async Task A_failed_recreate_keeps_the_topic_selected_when_it_survived()
+    {
+        var svc = new Mock<ITopicService>();
+        svc.Setup(s => s.ListTopicsAsync(It.IsAny<IKafkaSession>()))
+           .ReturnsAsync(new[] { new TopicInfo("orders", 4, 3) });
+        svc.Setup(s => s.GetTopicDetailAsync(It.IsAny<IKafkaSession>(), "orders"))
+           .ReturnsAsync(new TopicDetail(new TopicInfo("orders", 4, 3),
+               new List<PartitionInfo> { new(0, 1, 0, 0), new(1, 1, 0, 0), new(2, 1, 0, 0), new(3, 1, 0, 0) }));
+        svc.Setup(s => s.RecreateTopicWithFewerPartitionsAsync(It.IsAny<IKafkaSession>(), "orders", 2, (short)3))
+           .ThrowsAsync(new TopicRecreateFailedException(
+               TopicRecreateStage.WaitingForDeletion, topicMayBeDeleted: true, FailedAttempt(),
+               "Deletion was accepted but could not be confirmed in time.",
+               new TimeoutException("timed out")));
+
+        var vm = await RecreateAndReturnVm(svc);
+
+        // Deletion had not propagated: the topic is still listed. The warning stands, but the UI
+        // must not pretend the topic vanished.
+        Assert.Single(vm.Topics);
+        Assert.Equal("orders", vm.SelectedTopic!.Name);
+    }
+
+    [Fact]
     public async Task A_topic_with_no_overrides_says_so_instead_of_trailing_off()
     {
         // The common case: most topics override nothing. An empty list must read as "none", not as
