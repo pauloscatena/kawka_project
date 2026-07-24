@@ -19,6 +19,21 @@
 - Testes de integração precisam de Docker rodando. Se Docker não estiver disponível, rode apenas `Skat.KawkaProject.Features.Tests` e anote que a validação de integração ficou pendente — **não** marque a tarefa como concluída silenciosamente.
 - Este plano corrige código **já mergeado na main** (PR #1). Não é bloqueio de merge; é hardening de follow-up.
 
+## HARD GATE — revisão obrigatória entre tasks
+
+**Nenhuma task começa antes de a anterior ser revisada pelo agente `qa-tester` e os bugs apontados serem corrigidos.**
+
+Ordem obrigatória, ao fim de cada task deste plano:
+
+1. Implementar a task e rodar os testes indicados nos seus steps.
+2. Despachar o agente `qa-tester` sobre o que foi entregue naquela task.
+3. Corrigir todo bug apontado.
+4. Só então iniciar a próxima task.
+
+**Única exceção:** um achado pode ser dispensado sem correção quando for demonstrado ser **falso positivo** (o problema relatado não existe no código) ou **falso negativo** (o resultado do teste não reflete o comportamento real) — nos dois casos, o resultado do teste não corresponde à realidade. A demonstração precisa citar o trecho de código ou a saída de execução que prova a divergência, registrada na resposta. *"Parece um falso positivo"* não basta.
+
+Não pule o gate porque a task parece pequena ou porque a suíte já está verde. Se o `qa-tester` não puder rodar, pare e reporte — não prossiga assumindo que passaria.
+
 ## Rastreabilidade dos achados
 
 | Achado | Persona | Task |
@@ -1775,3 +1790,9 @@ Após a Task 12 (ou 14, se as opcionais forem executadas):
 - [ ] `dotnet build` → `0 Error(s)`
 - [ ] `dotnet test` → todos verdes, com Docker rodando para os testes de integração
 - [ ] Rodar o app e confirmar manualmente: abrir "▲ Increase" e depois "⚠ Recreate" mostra **um** formulário; recriar um tópico de 1 partição dá a mensagem "nothing to reduce"; limpar o campo de contagem e clicar "Recreate topic" dá "Enter the new partition count"; durante uma operação os botões destrutivos ficam desabilitados.
+
+## Revisão final do projeto
+
+Com **todas** as tasks concluídas (incluindo as opcionais 13 e 14, se executadas), rodar `/powerpuff-review` **sobre o projeto todo** — não apenas sobre o diff da última task.
+
+O objetivo é diferente do gate por task: o `qa-tester` valida cada entrega isoladamente, enquanto esta revisão procura o que só aparece quando tudo está junto — regressões introduzidas por uma task tardia numa correção anterior, inconsistências entre as fases, e acoplamento que nenhuma task viu sozinha. Tratar os achados como entrada para um novo ciclo de plano, não como algo a corrigir às pressas no fim.
