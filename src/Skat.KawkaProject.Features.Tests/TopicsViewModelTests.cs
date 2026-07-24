@@ -186,6 +186,32 @@ public class TopicsViewModelTests
     }
 
     [Fact]
+    public async Task Selecting_a_topic_whose_detail_fails_clears_the_stale_detail()
+    {
+        var svc = new Mock<ITopicService>();
+        svc.Setup(s => s.ListTopicsAsync(It.IsAny<IKafkaSession>()))
+           .ReturnsAsync(new[] { new TopicInfo("orders", 4, 1), new TopicInfo("gone", 1, 1) });
+        svc.Setup(s => s.GetTopicDetailAsync(It.IsAny<IKafkaSession>(), "orders"))
+           .ReturnsAsync(new TopicDetail(new TopicInfo("orders", 4, 1),
+               new List<PartitionInfo> { new(0, 1, 0, 0) }));
+        svc.Setup(s => s.GetTopicDetailAsync(It.IsAny<IKafkaSession>(), "gone"))
+           .ThrowsAsync(new InvalidOperationException("Topic 'gone' was not found on the cluster."));
+
+        var vm = new TopicsViewModel(FakeScreen(), FakeSession(), svc.Object, NoOpNavigate);
+        await vm.LoadTopicsAsync();
+        vm.SelectedTopic = vm.Topics[0];
+        Assert.NotNull(vm.SelectedTopicDetail);
+
+        vm.SelectedTopic = vm.Topics[1];
+
+        // Leaving 'orders' in the panel while the list highlights 'gone' makes the panel's own
+        // buttons target two different topics: expand/recreate read SelectedTopicDetail, delete
+        // reads SelectedTopic.
+        Assert.Null(vm.SelectedTopicDetail);
+        Assert.Contains("not found", vm.ErrorMessage);
+    }
+
+    [Fact]
     public async Task RecreateTopicAsync_rejects_count_outside_valid_range()
     {
         var svc = new Mock<ITopicService>();

@@ -51,6 +51,21 @@ public class TopicServiceIntegrationTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task GetTopicDetailAsync_does_not_auto_create_an_unknown_topic()
+    {
+        using var session = Session();
+        var svc = new TopicService();
+
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => svc.GetTopicDetailAsync(session, "detail-never-existed"));
+
+        // Opening the detail view of a topic someone else just deleted must report that, not
+        // silently recreate it empty with the broker's default partition count.
+        var topics = await svc.ListTopicsAsync(session);
+        Assert.DoesNotContain(topics, t => t.Name == "detail-never-existed");
+    }
+
+    [Fact]
     public async Task GetTopicConfigOverridesAsync_returns_nothing_when_the_topic_overrides_nothing()
     {
         using var session = Session();

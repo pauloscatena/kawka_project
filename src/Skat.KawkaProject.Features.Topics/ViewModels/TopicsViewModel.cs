@@ -262,7 +262,15 @@ public class TopicsViewModel : ReactiveObject, IRoutableViewModel
     private async Task LoadDetailAsync(string topicName)
     {
         try { SelectedTopicDetail = await _topicService.GetTopicDetailAsync(_session, topicName); }
-        catch (Exception ex) { ErrorMessage = ex.Message; }
+        catch (Exception ex)
+        {
+            // Clear it, do not leave the previously loaded topic on screen. Otherwise the panel and
+            // the list disagree about what is selected, and the panel's own actions target two
+            // different topics: expand/recreate read SelectedTopicDetail.Topic.Name while the
+            // delete button's CommandParameter reads SelectedTopic.Name.
+            SelectedTopicDetail = null;
+            ErrorMessage = ex.Message;
+        }
     }
 
     private void ApplyFilter()
