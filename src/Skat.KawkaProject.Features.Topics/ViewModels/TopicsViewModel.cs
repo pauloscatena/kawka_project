@@ -73,7 +73,19 @@ public class TopicsViewModel : ReactiveObject, IRoutableViewModel
     public ICommand CancelRecreateCommand { get; }
     public ICommand RecreateTopicCommand { get; }
 
-    public bool IsBusy { get => _isBusy; private set => this.RaiseAndSetIfChanged(ref _isBusy, value); }
+    public bool IsBusy
+    {
+        get => _isBusy;
+        private set { this.RaiseAndSetIfChanged(ref _isBusy, value); this.RaisePropertyChanged(nameof(IsNotBusy)); }
+    }
+
+    /// <summary>
+    /// Bound to IsEnabled on every mutating control and on the topic list. A recreate can wait up
+    /// to 30s for deletion to propagate, and nothing else must be clickable meanwhile: a second
+    /// destructive command issued mid-operation can delete the topic the recreate just put back,
+    /// and selecting another topic has its selection silently reverted when the operation finishes.
+    /// </summary>
+    public bool IsNotBusy => !_isBusy;
     public string? ErrorMessage { get => _errorMessage; private set => this.RaiseAndSetIfChanged(ref _errorMessage, value); }
 
     public string Filter

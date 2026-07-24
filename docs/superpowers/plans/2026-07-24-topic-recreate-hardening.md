@@ -11,9 +11,11 @@
 ## Pendências de verificação registradas (revisões de QA)
 
 - **Smoke test manual da UI** (QA Task 6, OBS-1): `ReselectTopicByName` existe para o caminho em que o `ListBox` escreve `null` de volta em `SelectedTopic` durante `ApplyFilter` — que só ocorre com o Avalonia rodando. Os testes unitários só alcançam a variante *stale*, então esse caminho fica coberto apenas por teste manual: recriar um tópico com sucesso e confirmar que a linha segue destacada no `ListBox` e o painel coerente.
-- **Navegação durante operação** (QA Task 6, OBS-2): sem gating na `ListBox`, clicar em outro tópico durante um recreate tem a seleção revertida ao concluir. **Mitigado pela Task 7** (travar comandos/lista durante operação).
+- **Navegação durante operação** (QA Task 6, OBS-2): sem gating na `ListBox`, clicar em outro tópico durante um recreate tem a seleção revertida ao concluir. **Fechado pela Task 7** — `IsEnabled="{Binding IsNotBusy}"` na `ListBox` recusa o clique de seleção durante a operação.
+- **Filtro durante operação** (QA Task 7, OBS-3): o `Filter` TextBox NÃO é gated por decisão deliberada — filtrar é exibição, não muta o broker, e travá-lo numa espera de 30s é pior que a consequência. Se o usuário filtrar o tópico selecionado para fora da lista durante um recreate, `ReselectTopicByName` não o reacha e a seleção fica stale (cosmético, auto-corrige na próxima seleção). Mesma classe do smoke test manual acima.
 - **Broker com ACL / delete recusado** (QA Tasks 4-5): a classificação `Error.IsLocalError` que decide `TopicMayBeDeleted` não foi exercitada contra ACL real — o container de teste não tem ACLs. Aproximada por outros códigos de erro do broker.
 - **Versões de broker** (QA Tasks 2-3): tudo medido contra `cp-kafka:6.1.9` single-node (Kafka 2.7, ZooKeeper). KRaft, Kafka 3.x/4.x e multi-broker não foram medidos.
+- **Flakiness da suíte de integração** (QA Tasks 3 e 7): `..._reduces_partitions_and_preserves_config` falhou uma vez com `Local: Timed out` na suíte cheia e passou isolado. Causa: `IAsyncLifetime` na classe de teste sobe um container Kafka por método, e sob carga concorrente o controller do broker single-node estoura. Backlog: `IClassFixture`/`ICollectionFixture` compartilhado cortaria ~2min e a flakiness.
 
 ## Global Constraints
 

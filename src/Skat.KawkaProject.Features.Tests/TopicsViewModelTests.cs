@@ -274,6 +274,43 @@ public class TopicsViewModelTests
     }
 
     [Fact]
+    public async Task IsNotBusy_tracks_IsBusy_and_notifies_while_an_operation_is_in_flight()
+    {
+        var svc = new Mock<ITopicService>();
+        svc.Setup(s => s.ListTopicsAsync(It.IsAny<IKafkaSession>()))
+           .ReturnsAsync(new[] { new TopicInfo("orders", 4, 1) });
+        svc.Setup(s => s.GetTopicDetailAsync(It.IsAny<IKafkaSession>(), "orders"))
+           .ReturnsAsync(new TopicDetail(new TopicInfo("orders", 4, 1),
+               new List<PartitionInfo> { new(0, 1, 0, 0), new(1, 1, 0, 0), new(2, 1, 0, 0), new(3, 1, 0, 0) }));
+
+        var gate = new TaskCompletionSource();
+        svc.Setup(s => s.RecreateTopicWithFewerPartitionsAsync(It.IsAny<IKafkaSession>(), "orders", 2, (short)1))
+           .Returns(gate.Task);
+
+        var vm = new TopicsViewModel(FakeScreen(), FakeSession(), svc.Object, NoOpNavigate);
+        await vm.LoadTopicsAsync();
+        vm.SelectedTopic = vm.Topics[0];
+        vm.ShowRecreateFormCommand.Execute(null);
+        vm.RecreateConfirmName = "orders";
+        vm.RecreatePartitionCount = 2;
+
+        var raised = new List<string?>();
+        vm.PropertyChanged += (_, e) => raised.Add(e.PropertyName);
+
+        var running = vm.RecreateTopicAsync();
+
+        // Every mutating control binds IsEnabled to IsNotBusy, so a 30s recreate must not leave the
+        // delete button live on the same topic.
+        Assert.False(vm.IsNotBusy);
+
+        gate.SetResult();
+        await running;
+
+        Assert.True(vm.IsNotBusy);
+        Assert.Contains(nameof(TopicsViewModel.IsNotBusy), raised);
+    }
+
+    [Fact]
     public async Task A_successful_recreate_reselects_the_refreshed_topic()
     {
         // Mutable cluster state rather than SetupSequence: the VM constructor fires a
