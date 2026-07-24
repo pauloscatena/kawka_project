@@ -68,6 +68,7 @@ Não pule o gate porque a task parece pequena ou porque a suíte já está verde
 | Composition root dono do init de `MessagesViewModel` | 🌸 #4 | 14 (opcional) |
 | Null-check deferido sem comentário | 💙 #8 | 14 (opcional) |
 | `GetTopicDetailAsync` bloqueia a UI thread | 💚 #12 | 3 (parcial) + 13 |
+| `GetMetadata(topicName, …)` auto-cria o tópico | QA Task 1 (O-4) | 3 (Step 4) |
 
 **Fora de escopo deste plano** (registrado, não endereçado): 🌸 #3 — unificar os dois mecanismos de confirmação (`Interaction` vs digitar-o-nome) e rotear ambos os caminhos destrutivos pela mesma primitiva de delete. É uma decisão de produto sobre qual mecanismo vence, e a Buttercup explicitamente endossou o gate atual. Decidir antes de planejar.
 
@@ -449,15 +450,49 @@ Em `Skat.KawkaProject.Kafka/TopicService.cs`, dentro de `GetTopicDetailAsync`, s
         }).ToList()).ConfigureAwait(false);
 ```
 
-- [ ] **Step 4: Rodar a suíte completa**
+- [ ] **Step 4: Eliminar a auto-criação em `GetTopicDetailAsync`**
+
+Achado da revisão de QA da Task 1 (O-4), medido contra broker real: `admin.GetMetadata(topicName, ...)` — o overload de **um tópico nomeado** — auto-cria o tópico quando `auto.create.topics.enable=true`, que é o default do broker e o do container de teste.
+
+Cenário concreto: o usuário clica num tópico da lista que outra pessoa acabou de deletar. Em vez de erro, o app **recria** o tópico, vazio, com o `num.partitions` do broker — só por ter aberto a tela de detalhe.
+
+Em `Skat.KawkaProject.Kafka/TopicService.cs`, dentro de `GetTopicDetailAsync`, substituir as duas linhas de leitura de metadata:
+
+```csharp
+        // Full-cluster metadata: the GetMetadata(topicName, ...) overload auto-creates the topic
+        // when auto.create.topics.enable is on, which would turn "open the detail view of a topic
+        // someone just deleted" into "silently recreate it".
+        var meta = await Task.Run(() => admin.GetMetadata(MetadataQueryTimeout)).ConfigureAwait(false);
+        var topicMeta = meta.Topics.FirstOrDefault(t => t.Topic == topicName)
+            ?? throw new InvalidOperationException($"Topic '{topicName}' was not found on the cluster.");
+```
+
+Teste correspondente, em `Skat.KawkaProject.Kafka.Tests/TopicServiceIntegrationTests.cs`:
+
+```csharp
+    [Fact]
+    public async Task GetTopicDetailAsync_does_not_auto_create_an_unknown_topic()
+    {
+        using var session = Session();
+        var svc = new TopicService();
+
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => svc.GetTopicDetailAsync(session, "detail-never-existed"));
+
+        var topics = await svc.ListTopicsAsync(session);
+        Assert.DoesNotContain(topics, t => t.Name == "detail-never-existed");
+    }
+```
+
+- [ ] **Step 5: Rodar a suíte completa**
 
 Run: `dotnet build && dotnet test`
 Expected: PASS, sem regressões. O build deve terminar com `0 Error(s)`.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 6: Commit**
 
 ```bash
-git add Skat.KawkaProject.Kafka/TopicService.cs
+git add Skat.KawkaProject.Kafka/TopicService.cs Skat.KawkaProject.Kafka.Tests/TopicServiceIntegrationTests.cs
 git commit -m "fix(kafka): require positive deletion signal, name wait timings, add ConfigureAwait"
 ```
 

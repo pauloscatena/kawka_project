@@ -103,4 +103,82 @@ public class TopicServiceIntegrationTests : IAsyncLifetime
         var config = await svc.GetTopicConfigAsync(session, "shrink-topic");
         Assert.Equal("7200000", config["retention.ms"]);
     }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    [InlineData(4)]
+    [InlineData(9)]
+    public async Task RecreateTopicWithFewerPartitionsAsync_rejects_invalid_count_without_deleting(int requested)
+    {
+        using var session = Session();
+        var svc = new TopicService();
+        var topic = $"guard-topic-{(requested < 0 ? "neg" : requested.ToString())}";
+        await svc.CreateTopicAsync(session, topic, 4, 1);
+
+        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(
+            () => svc.RecreateTopicWithFewerPartitionsAsync(session, topic, requested, 1));
+
+        // The guard must run BEFORE the delete: the topic has to be untouched.
+        var detail = await svc.GetTopicDetailAsync(session, topic);
+        Assert.Equal(4, detail.Partitions.Count);
+    }
+
+    [Fact]
+    public async Task RecreateTopicWithFewerPartitionsAsync_rejects_unknown_topic()
+    {
+        using var session = Session();
+        var svc = new TopicService();
+
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => svc.RecreateTopicWithFewerPartitionsAsync(session, "no-such-topic-here", 1, 1));
+    }
+
+    [Fact]
+    public async Task RecreateTopicWithFewerPartitionsAsync_does_not_auto_create_the_topic_it_rejects()
+    {
+        using var session = Session();
+        var svc = new TopicService();
+
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => svc.RecreateTopicWithFewerPartitionsAsync(session, "never-existed", 1, 1));
+
+        // Asking a broker for metadata about a single named topic auto-creates it when
+        // auto.create.topics.enable is on. Rejecting a typo'd name must not create it.
+        var topics = await svc.ListTopicsAsync(session);
+        Assert.DoesNotContain(topics, t => t.Name == "never-existed");
+    }
+
+    [Theory]
+    [InlineData(3, 1)]   // lower bound: reduce all the way to a single partition
+    [InlineData(4, 3)]   // upper bound: reduce by exactly one
+    public async Task RecreateTopicWithFewerPartitionsAsync_accepts_both_ends_of_the_valid_range(
+        int initialCount, int requested)
+    {
+        using var session = Session();
+        var svc = new TopicService();
+        var topic = $"bound-topic-{initialCount}-{requested}";
+        await svc.CreateTopicAsync(session, topic, initialCount, 1);
+
+        await svc.RecreateTopicWithFewerPartitionsAsync(session, topic, requested, 1);
+
+        // Without this, tightening the guard to `newPartitionCount <= 1` would keep every other
+        // test green while breaking the most common real request: shrink down to one partition.
+        var detail = await svc.GetTopicDetailAsync(session, topic);
+        Assert.Equal(requested, detail.Partitions.Count);
+    }
+
+    [Fact]
+    public async Task RecreateTopicWithFewerPartitionsAsync_explains_that_a_single_partition_cannot_shrink()
+    {
+        using var session = Session();
+        var svc = new TopicService();
+        await svc.CreateTopicAsync(session, "solo-topic", 1, 1);
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => svc.RecreateTopicWithFewerPartitionsAsync(session, "solo-topic", 1, 1));
+
+        Assert.Contains("nothing to reduce", ex.Message);
+        Assert.DoesNotContain("between 1 and 0", ex.Message);
+    }
 }

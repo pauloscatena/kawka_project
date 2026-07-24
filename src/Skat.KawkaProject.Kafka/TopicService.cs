@@ -88,9 +88,33 @@ public class TopicService : ITopicService
     public async Task RecreateTopicWithFewerPartitionsAsync(
         IKafkaSession session, string topicName, int newPartitionCount, short replicationFactor)
     {
+        using var admin = new AdminClientBuilder(AdminConfig(session)).Build();
+
+        // Validate BEFORE anything destructive: once DeleteTopicsAsync is issued the deletion is
+        // asynchronous and irrevocable, so an invalid argument discovered afterwards costs the
+        // user their data. An operation that cannot be undone must check its own arguments
+        // rather than trusting whoever happens to call it.
+        var currentCount = await GetPartitionCountAsync(admin, topicName);
+
+        // Handled before the range check: with currentCount == 1 the valid range is empty, and the
+        // range message would read "must be between 1 and 0". This is a fact about the topic, not
+        // about the argument, so it is not an ArgumentException.
+        if (currentCount <= 1)
+        {
+            throw new InvalidOperationException(
+                $"Topic '{topicName}' has a single partition; there is nothing to reduce.");
+        }
+
+        if (newPartitionCount < 1 || newPartitionCount >= currentCount)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(newPartitionCount), newPartitionCount,
+                $"Must be between 1 and {currentCount - 1}: topic '{topicName}' currently has " +
+                $"{currentCount} partitions, and this operation only reduces the partition count.");
+        }
+
         var config = await GetTopicConfigAsync(session, topicName);
 
-        using var admin = new AdminClientBuilder(AdminConfig(session)).Build();
         await admin.DeleteTopicsAsync(new[] { topicName });
         await WaitForTopicDeletionAsync(admin, topicName);
 
@@ -104,6 +128,40 @@ public class TopicService : ITopicService
                 Configs = new Dictionary<string, string>(config)
             }
         });
+    }
+
+    private static async Task<int> GetPartitionCountAsync(IAdminClient admin, string topicName)
+    {
+        // Full-cluster metadata, NOT GetMetadata(topicName, ...): asking a broker about one named
+        // topic auto-creates it when auto.create.topics.enable is on (the default). That would turn
+        // "recreate a topic whose name I typo'd" into "silently create a topic", and would make the
+        // not-found check below unreachable.
+        var meta = await Task.Run(() => admin.GetMetadata(TimeSpan.FromSeconds(10)));
+        var topic = meta.Topics.FirstOrDefault(t => t.Topic == topicName);
+
+        if (topic is null || topic.Error.Code == ErrorCode.UnknownTopicOrPart)
+        {
+            throw new InvalidOperationException(
+                $"Topic '{topicName}' was not found on the cluster; refusing to recreate it.");
+        }
+
+        // A topic that exists can still answer with a transient error (LeaderNotAvailable during an
+        // election, for instance). Reporting that as "not found" would be a lie; both refuse, but
+        // only one of them tells the operator what to actually go and look at.
+        if (topic.Error.IsError)
+        {
+            throw new InvalidOperationException(
+                $"Could not read metadata for topic '{topicName}': {topic.Error.Reason}. " +
+                "Refusing to recreate it until the cluster answers reliably.");
+        }
+
+        if (topic.Partitions.Count == 0)
+        {
+            throw new InvalidOperationException(
+                $"Topic '{topicName}' reported no partitions; refusing to recreate it.");
+        }
+
+        return topic.Partitions.Count;
     }
 
     private static async Task WaitForTopicDeletionAsync(IAdminClient admin, string topicName)
