@@ -1,0 +1,38 @@
+# Normalize all text files to LF in the repository.
+# Git auto-detects text vs binary; text files are stored as LF and checked out as LF
+# on every platform, so a Windows editor (Rider/VS) can no longer flip the whole tree.
+* text=auto eol=lf
+
+# Files that Visual Studio rewrites with CRLF regardless — keep them CRLF to avoid churn.
+*.sln       text eol=crlf
+*.bat       text eol=crlf
+*.cmd       text eol=crlf
+*.ps1       text eol=crlf
+
+# Shell scripts must stay LF or they break under bash/WSL.
+*.sh        text eol=lf
+
+# Explicit text types in this repo.
+*.cs        text diff=csharp
+*.axaml     text
+*.csproj    text
+*.props     text
+*.targets   text
+*.md        text
+*.xml       text
+*.json      text
+*.html      text
+*.yml       text
+*.yaml      text
+
+# Binary — never touch these.
+*.ico       binary
+*.png       binary
+*.jpg       binary
+*.jpeg      binary
+*.gif       binary
+*.pdf       binary
+*.zip       binary
+*.dll       binary
+*.exe       binary
+*.snk       binary
