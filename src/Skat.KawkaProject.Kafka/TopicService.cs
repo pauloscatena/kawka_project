@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using Confluent.Kafka;
 using Confluent.Kafka.Admin;
+using Skat.KawkaProject.Core.Exceptions;
 using Skat.KawkaProject.Core.Interfaces;
 using Skat.KawkaProject.Core.Models;
 
@@ -16,6 +17,25 @@ public class TopicService : ITopicService
 
     /// <summary>How many consecutive polls must report the topic gone before we believe it.</summary>
     private const int RequiredConsecutiveAbsences = 2;
+
+    // Internal, not private: the retry unit tests pass their own attempt count, so nothing else in
+    // the suite would notice these being set to "do not retry".
+    internal static readonly TimeSpan CreateRetryDelay = TimeSpan.FromSeconds(2);
+    internal const int CreateAttempts = 3;
+
+    /// <summary>
+    /// Create failures that will fail identically on every retry. Measured: retrying an
+    /// InvalidReplicationFactor takes 4.0s instead of 39ms, all of it Task.Delay, while the user
+    /// watches a spinner with their topic already deleted.
+    /// </summary>
+    private static readonly ErrorCode[] PermanentCreateErrors =
+    {
+        ErrorCode.InvalidReplicationFactor,
+        ErrorCode.InvalidPartitions,
+        ErrorCode.InvalidConfig,
+        ErrorCode.InvalidReplicaAssignment,
+        ErrorCode.PolicyViolation
+    };
 
     private static AdminClientConfig AdminConfig(IKafkaSession session)
     {
@@ -148,21 +168,162 @@ public class TopicService : ITopicService
                 $"{currentCount} partitions, and this operation only reduces the partition count.");
         }
 
-        var config = await GetTopicConfigOverridesAsync(session, topicName).ConfigureAwait(false);
-
-        await admin.DeleteTopicsAsync(new[] { topicName }).ConfigureAwait(false);
-        await WaitForTopicDeletionAsync(admin, topicName).ConfigureAwait(false);
-
-        await admin.CreateTopicsAsync(new[]
+        // The config read is the last non-destructive step. Everything after it is wrapped so the
+        // failure carries WHERE it happened, whether the data is genuinely at risk, and what the
+        // topic was made of - the caller cannot re-derive any of it once the topic is gone.
+        IReadOnlyDictionary<string, string> config;
+        try
         {
-            new TopicSpecification
+            config = await GetTopicConfigOverridesAsync(session, topicName).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            throw new TopicRecreateFailedException(
+                TopicRecreateStage.ReadingConfig, topicMayBeDeleted: false,
+                new TopicRecreateAttempt(topicName, currentCount, newPartitionCount, replicationFactor,
+                    new Dictionary<string, string>()),
+                $"Could not read the configuration of topic '{topicName}': {ex.Message}. It was NOT modified.",
+                ex);
+        }
+
+        var attempt = new TopicRecreateAttempt(
+            topicName, currentCount, newPartitionCount, replicationFactor, config);
+
+        await RunRecreateStagesAsync(
+            attempt,
+            deleteTopic: () => admin.DeleteTopicsAsync(new[] { topicName }),
+            waitForDeletion: () => WaitForTopicDeletionAsync(admin, topicName),
+            createWithRetry: () => CreateWithRetryAsync(
+                attempt,
+                () => admin.CreateTopicsAsync(new[] { SpecFor(attempt) }),
+                () => TopicMatchesRequestAsync(admin, attempt),
+                CreateAttempts, CreateRetryDelay)).ConfigureAwait(false);
+    }
+
+    private static TopicSpecification SpecFor(TopicRecreateAttempt attempt) => new()
+    {
+        Name = attempt.TopicName,
+        NumPartitions = attempt.RequestedPartitionCount,
+        ReplicationFactor = attempt.ReplicationFactor,
+        Configs = new Dictionary<string, string>(attempt.PreservedConfig)
+    };
+
+    /// <summary>
+    /// Internal so unit tests can script each stage failing. Every one of these translations is a
+    /// safety statement about the user's data, and none of them are observable through a healthy
+    /// broker - the integration suite stays green even if the stages are mislabelled.
+    /// </summary>
+    internal static async Task RunRecreateStagesAsync(
+        TopicRecreateAttempt attempt,
+        Func<Task> deleteTopic,
+        Func<Task> waitForDeletion,
+        Func<Task> createWithRetry)
+    {
+        try
+        {
+            await deleteTopic().ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            // A per-topic error code from the BROKER means the request reached the controller and
+            // came back refused - an ACL denial, or delete.topic.enable=false - which is precisely
+            // why it was not executed. The topic is intact. Only a local failure (timeout,
+            // transport) leaves the outcome genuinely unknown.
+            var refusedByBroker = ex is DeleteTopicsException deleteFailure
+                && deleteFailure.Results.Any(r => r.Error.IsError && !r.Error.IsLocalError);
+
+            throw new TopicRecreateFailedException(
+                TopicRecreateStage.Deleting, topicMayBeDeleted: !refusedByBroker, attempt,
+                refusedByBroker
+                    ? $"The cluster refused to delete topic '{attempt.TopicName}': {ex.Message}. It was NOT modified."
+                    : $"The delete request for topic '{attempt.TopicName}' failed and may or may not have "
+                      + $"reached the controller: {ex.Message}",
+                ex);
+        }
+
+        try
+        {
+            await waitForDeletion().ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            throw new TopicRecreateFailedException(
+                TopicRecreateStage.WaitingForDeletion, topicMayBeDeleted: true, attempt,
+                $"Deletion of topic '{attempt.TopicName}' was accepted but could not be confirmed in "
+                + $"time, so it was not recreated: {ex.Message}", ex);
+        }
+
+        await createWithRetry().ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Internal so a unit test can drive the retry with scripted failures and no delay. A create
+    /// that fails transiently and then succeeds is exactly what a single-node container cannot be
+    /// made to produce on demand.
+    /// </summary>
+    internal static async Task CreateWithRetryAsync(
+        TopicRecreateAttempt attempt,
+        Func<Task> createTopic,
+        Func<Task<bool>> createdTopicMatchesRequest,
+        int attempts,
+        TimeSpan retryDelay)
+    {
+        // The delete already happened, so this is the one call worth fighting for: every failure
+        // here leaves the user without their topic.
+        Exception? lastError = null;
+
+        for (var i = 1; i <= attempts; i++)
+        {
+            try
             {
-                Name = topicName,
-                NumPartitions = newPartitionCount,
-                ReplicationFactor = replicationFactor,
-                Configs = new Dictionary<string, string>(config)
+                await createTopic().ConfigureAwait(false);
+                return;
             }
-        }).ConfigureAwait(false);
+            catch (CreateTopicsException ex) when (IsNameTaken(ex))
+            {
+                // Something occupies the name. Do NOT guess whether it was our own request landing
+                // with a lost response: ask the cluster whether what is there is what we asked for.
+                // A heuristic here reports a shrink that never happened, with the data already gone.
+                if (await createdTopicMatchesRequest().ConfigureAwait(false)) return;
+
+                throw new TopicRecreateFailedException(
+                    TopicRecreateStage.Creating, topicMayBeDeleted: true, attempt,
+                    $"Topic '{attempt.TopicName}' was deleted, and a topic with that name exists again "
+                    + $"but is not the one requested ({attempt.RequestedPartitionCount} partitions). "
+                    + "Something else recreated it; the requested change was NOT applied.", ex);
+            }
+            catch (Exception ex)
+            {
+                lastError = ex;
+
+                // Configuration errors are deterministic. Retrying spends the budget - and the
+                // user's patience, with their topic already deleted - to fail identically.
+                if (IsPermanentCreateFailure(ex)) break;
+                if (i < attempts) await Task.Delay(retryDelay).ConfigureAwait(false);
+            }
+        }
+
+        throw new TopicRecreateFailedException(
+            TopicRecreateStage.Creating, topicMayBeDeleted: true, attempt,
+            $"Topic '{attempt.TopicName}' was deleted but could not be recreated: {lastError!.Message}",
+            lastError);
+    }
+
+    private static bool IsNameTaken(CreateTopicsException ex) =>
+        ex.Results.Any(r => r.Error.Code == ErrorCode.TopicAlreadyExists);
+
+    internal static bool IsPermanentCreateFailure(Exception ex) =>
+        ex is CreateTopicsException create
+        && create.Results.Any(r => PermanentCreateErrors.Contains(r.Error.Code));
+
+    private static async Task<bool> TopicMatchesRequestAsync(IAdminClient admin, TopicRecreateAttempt attempt)
+    {
+        var meta = await Task.Run(() => admin.GetMetadata(MetadataQueryTimeout)).ConfigureAwait(false);
+        var topic = meta.Topics.FirstOrDefault(t => t.Topic == attempt.TopicName);
+
+        return topic is not null
+               && !topic.Error.IsError
+               && topic.Partitions.Count == attempt.RequestedPartitionCount;
     }
 
     private static async Task<int> GetPartitionCountAsync(IAdminClient admin, string topicName)

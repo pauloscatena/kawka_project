@@ -1,5 +1,6 @@
 using Confluent.Kafka;
 using Confluent.Kafka.Admin;
+using Skat.KawkaProject.Core.Exceptions;
 using Skat.KawkaProject.Core.Models;
 using Skat.KawkaProject.Kafka;
 using Testcontainers.Kafka;
@@ -48,6 +49,53 @@ public class TopicServiceIntegrationTests : IAsyncLifetime
         await svc.CreateTopicAsync(session, "detail-topic", 2, 1);
         var detail = await svc.GetTopicDetailAsync(session, "detail-topic");
         Assert.Equal(2, detail.Partitions.Count);
+    }
+
+    [Fact]
+    public async Task RecreateTopicWithFewerPartitionsAsync_reports_the_stage_and_preserves_config_when_the_create_fails()
+    {
+        using var session = Session();
+        var svc = new TopicService();
+
+        var adminCfg = new AdminClientConfig { BootstrapServers = _kafka.GetBootstrapAddress() };
+        using (var admin = new AdminClientBuilder(adminCfg).Build())
+        {
+            await admin.CreateTopicsAsync(new[]
+            {
+                new TopicSpecification
+                {
+                    Name = "fail-topic",
+                    NumPartitions = 4,
+                    ReplicationFactor = 1,
+                    Configs = new Dictionary<string, string> { ["retention.ms"] = "604800000" }
+                }
+            });
+        }
+
+        // Replication factor 99 on a single-broker container makes CreateTopics fail AFTER the
+        // delete has already happened - the exact failure mode the user must survive.
+        var ex = await Assert.ThrowsAsync<TopicRecreateFailedException>(
+            () => svc.RecreateTopicWithFewerPartitionsAsync(session, "fail-topic", 2, 99));
+
+        Assert.Equal(TopicRecreateStage.Creating, ex.Stage);
+        Assert.True(ex.TopicMayBeDeleted);
+
+        // Without this the only record of how the topic was configured dies with the local
+        // variable, and the app's own "New Topic" form cannot restore it - it takes no configs.
+        Assert.Equal("604800000", ex.PreservedConfig["retention.ms"]);
+    }
+
+    [Fact]
+    public async Task RecreateTopicWithFewerPartitionsAsync_does_not_claim_data_loss_when_it_fails_before_deleting()
+    {
+        using var session = Session();
+        var svc = new TopicService();
+
+        // No such topic: the failure happens while reading state, before anything destructive.
+        // ThrowsAsync matches the type exactly, so this also asserts it is NOT the typed
+        // TopicRecreateFailedException - a pre-delete failure must never carry a data-loss verdict.
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => svc.RecreateTopicWithFewerPartitionsAsync(session, "absent-topic", 1, 1));
     }
 
     [Fact]
