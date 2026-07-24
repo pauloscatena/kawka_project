@@ -182,7 +182,7 @@ public class TopicService : ITopicService
                 TopicRecreateStage.ReadingConfig, topicMayBeDeleted: false,
                 new TopicRecreateAttempt(topicName, currentCount, newPartitionCount, replicationFactor,
                     new Dictionary<string, string>()),
-                $"Could not read the configuration of topic '{topicName}': {ex.Message}. It was NOT modified.",
+                $"Could not read the configuration of topic '{topicName}': {AsSentence(ex.Message)} It was NOT modified.",
                 ex);
         }
 
@@ -235,9 +235,9 @@ public class TopicService : ITopicService
             throw new TopicRecreateFailedException(
                 TopicRecreateStage.Deleting, topicMayBeDeleted: !refusedByBroker, attempt,
                 refusedByBroker
-                    ? $"The cluster refused to delete topic '{attempt.TopicName}': {ex.Message}. It was NOT modified."
+                    ? $"The cluster refused to delete topic '{attempt.TopicName}': {AsSentence(ex.Message)} It was NOT modified."
                     : $"The delete request for topic '{attempt.TopicName}' failed and may or may not have "
-                      + $"reached the controller: {ex.Message}",
+                      + $"reached the controller: {AsSentence(ex.Message)}",
                 ex);
         }
 
@@ -250,7 +250,7 @@ public class TopicService : ITopicService
             throw new TopicRecreateFailedException(
                 TopicRecreateStage.WaitingForDeletion, topicMayBeDeleted: true, attempt,
                 $"Deletion of topic '{attempt.TopicName}' was accepted but could not be confirmed in "
-                + $"time, so it was not recreated: {ex.Message}", ex);
+                + $"time, so it was not recreated: {AsSentence(ex.Message)}", ex);
         }
 
         await createWithRetry().ConfigureAwait(false);
@@ -284,7 +284,25 @@ public class TopicService : ITopicService
                 // Something occupies the name. Do NOT guess whether it was our own request landing
                 // with a lost response: ask the cluster whether what is there is what we asked for.
                 // A heuristic here reports a shrink that never happened, with the data already gone.
-                if (await createdTopicMatchesRequest().ConfigureAwait(false)) return;
+                bool matchesRequest;
+                try
+                {
+                    matchesRequest = await createdTopicMatchesRequest().ConfigureAwait(false);
+                }
+                catch (Exception probeFailure)
+                {
+                    // An exception thrown inside a catch block is NOT caught by that try's sibling
+                    // catches. Without this, one network blip - the same one that lost the create
+                    // response - escapes untyped all the way to the caller, which has no way to know
+                    // a delete ever happened and reports it as a bare "Local: Timed out".
+                    throw new TopicRecreateFailedException(
+                        TopicRecreateStage.Creating, topicMayBeDeleted: true, attempt,
+                        $"Topic '{attempt.TopicName}' was deleted and its name is taken again, but the "
+                        + $"cluster could not be queried to find out by what: {AsSentence(probeFailure.Message)}",
+                        probeFailure);
+                }
+
+                if (matchesRequest) return;
 
                 throw new TopicRecreateFailedException(
                     TopicRecreateStage.Creating, topicMayBeDeleted: true, attempt,
@@ -305,8 +323,19 @@ public class TopicService : ITopicService
 
         throw new TopicRecreateFailedException(
             TopicRecreateStage.Creating, topicMayBeDeleted: true, attempt,
-            $"Topic '{attempt.TopicName}' was deleted but could not be recreated: {lastError!.Message}",
+            $"Topic '{attempt.TopicName}' was deleted but could not be recreated: {AsSentence(lastError!.Message)}",
             lastError);
+    }
+
+    /// <summary>
+    /// Broker messages sometimes end in a period and sometimes do not, so joining one to the next
+    /// sentence blindly yields either "failed].. It was" or "Local: Timed out Check 'orders'".
+    /// </summary>
+    private static string AsSentence(string text)
+    {
+        var trimmed = text.TrimEnd();
+        if (trimmed.Length == 0) return "";
+        return ".!?".Contains(trimmed[^1]) ? trimmed : trimmed + ".";
     }
 
     private static bool IsNameTaken(CreateTopicsException ex) =>

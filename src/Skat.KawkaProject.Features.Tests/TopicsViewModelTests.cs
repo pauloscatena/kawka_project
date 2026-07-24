@@ -1,5 +1,6 @@
 using Moq;
 using ReactiveUI;
+using Skat.KawkaProject.Core.Exceptions;
 using Skat.KawkaProject.Core.Interfaces;
 using Skat.KawkaProject.Core.Models;
 using Skat.KawkaProject.Features.Topics.ViewModels;
@@ -183,6 +184,152 @@ public class TopicsViewModelTests
 
         svc.Verify(s => s.RecreateTopicWithFewerPartitionsAsync(
             It.IsAny<IKafkaSession>(), It.IsAny<string>(), It.IsAny<int>(), It.IsAny<short>()), Times.Never);
+    }
+
+    private static TopicRecreateAttempt FailedAttempt() => new(
+        "orders", OriginalPartitionCount: 4, RequestedPartitionCount: 2, ReplicationFactor: 3,
+        PreservedConfig: new Dictionary<string, string> { ["retention.ms"] = "604800000" });
+
+    private static Mock<ITopicService> ServiceThatFailsRecreateWith(Exception failure)
+    {
+        var svc = new Mock<ITopicService>();
+        svc.Setup(s => s.ListTopicsAsync(It.IsAny<IKafkaSession>()))
+           .ReturnsAsync(new[] { new TopicInfo("orders", 4, 3) });
+        svc.Setup(s => s.GetTopicDetailAsync(It.IsAny<IKafkaSession>(), "orders"))
+           .ReturnsAsync(new TopicDetail(new TopicInfo("orders", 4, 3),
+               new List<PartitionInfo> { new(0, 1, 0, 0), new(1, 1, 0, 0), new(2, 1, 0, 0), new(3, 1, 0, 0) }));
+        svc.Setup(s => s.RecreateTopicWithFewerPartitionsAsync(It.IsAny<IKafkaSession>(), "orders", 2, (short)3))
+           .ThrowsAsync(failure);
+        return svc;
+    }
+
+    private static async Task<TopicsViewModel> RecreateAndReturnVm(Mock<ITopicService> svc)
+    {
+        var vm = new TopicsViewModel(FakeScreen(), FakeSession(), svc.Object, NoOpNavigate);
+        await vm.LoadTopicsAsync();
+        vm.SelectedTopic = vm.Topics[0];
+
+        // Open the form the way the user does: ShowRecreateFormCommand clears the confirmation
+        // name, so setting it first would be silently undone and the assertions about the form's
+        // state after a failure would be testing a form that was never open.
+        vm.ShowRecreateFormCommand.Execute(null);
+        vm.RecreateConfirmName = "orders";
+        vm.RecreatePartitionCount = 2;
+        await vm.RecreateTopicAsync();
+        return vm;
+    }
+
+    [Theory]
+    [InlineData(TopicRecreateStage.Deleting)]
+    [InlineData(TopicRecreateStage.WaitingForDeletion)]
+    [InlineData(TopicRecreateStage.Creating)]
+    public async Task Every_failure_that_may_have_deleted_the_topic_warns_about_data_loss(TopicRecreateStage stage)
+    {
+        // The likeliest failure is a propagation timeout, where the topic is STILL LISTED at the
+        // moment of failure. The old code read that as "nothing happened" and said only "timed
+        // out"; the user goes to lunch and the deletion completes behind them.
+        var svc = ServiceThatFailsRecreateWith(new TopicRecreateFailedException(
+            stage, topicMayBeDeleted: true, FailedAttempt(),
+            "the service explains what went wrong", new InvalidOperationException("broker unreachable")));
+
+        var vm = await RecreateAndReturnVm(svc);
+
+        Assert.Contains("DATA LOSS RISK", vm.ErrorMessage);
+    }
+
+    [Fact]
+    public async Task A_delete_the_broker_refused_does_not_warn_about_data_loss()
+    {
+        // delete.topic.enable=false or an ACL denial: the topic is provably intact. Crying wolf
+        // here teaches the user to dismiss the warning when it is real.
+        var svc = ServiceThatFailsRecreateWith(new TopicRecreateFailedException(
+            TopicRecreateStage.Deleting, topicMayBeDeleted: false, FailedAttempt(),
+            "The cluster refused to delete topic 'orders'. It was NOT modified.",
+            new InvalidOperationException("Broker: Invalid request")));
+
+        var vm = await RecreateAndReturnVm(svc);
+
+        Assert.DoesNotContain("DATA LOSS RISK", vm.ErrorMessage);
+        Assert.Contains("NOT modified", vm.ErrorMessage);
+    }
+
+    [Fact]
+    public async Task A_data_loss_warning_carries_everything_needed_to_rebuild_the_topic()
+    {
+        var svc = ServiceThatFailsRecreateWith(new TopicRecreateFailedException(
+            TopicRecreateStage.Creating, topicMayBeDeleted: true, FailedAttempt(),
+            "Topic 'orders' was deleted but could not be recreated: rf too large",
+            new InvalidOperationException("rf too large")));
+
+        var vm = await RecreateAndReturnVm(svc);
+
+        // The topic is gone, so neither the list nor the detail panel can answer "what was it?".
+        // This message is the only surviving record the user has.
+        Assert.Contains("4 partitions", vm.ErrorMessage);
+        Assert.Contains("replication factor 3", vm.ErrorMessage);
+        Assert.Contains("retention.ms=604800000", vm.ErrorMessage);
+
+        // And the reason must survive too, or the user cannot act on it.
+        Assert.Contains("rf too large", vm.ErrorMessage);
+    }
+
+    [Fact]
+    public async Task A_topic_with_no_overrides_says_so_instead_of_trailing_off()
+    {
+        // The common case: most topics override nothing. An empty list must read as "none", not as
+        // an empty string that is indistinguishable from "we failed to capture them".
+        var attempt = new TopicRecreateAttempt(
+            "orders", 4, 2, 3, new Dictionary<string, string>());
+
+        var svc = ServiceThatFailsRecreateWith(new TopicRecreateFailedException(
+            TopicRecreateStage.Creating, topicMayBeDeleted: true, attempt,
+            "Topic 'orders' was deleted but could not be recreated: broker down.",
+            new InvalidOperationException("broker down")));
+
+        var vm = await RecreateAndReturnVm(svc);
+
+        Assert.Contains("config overrides: none", vm.ErrorMessage);
+    }
+
+    [Fact]
+    public async Task A_data_loss_failure_closes_the_recreate_form()
+    {
+        var svc = ServiceThatFailsRecreateWith(new TopicRecreateFailedException(
+            TopicRecreateStage.Creating, topicMayBeDeleted: true, FailedAttempt(),
+            "Topic 'orders' was deleted but could not be recreated: broker down.",
+            new InvalidOperationException("broker down")));
+
+        var vm = await RecreateAndReturnVm(svc);
+
+        // Leaving the form open leaves a primed destructive button next to an already-typed
+        // confirmation name — and the next click wipes the only surviving record of the topic.
+        Assert.False(vm.IsRecreatingTopic);
+    }
+
+    [Fact]
+    public async Task A_refused_delete_leaves_the_recreate_form_open_to_retry()
+    {
+        var svc = ServiceThatFailsRecreateWith(new TopicRecreateFailedException(
+            TopicRecreateStage.Deleting, topicMayBeDeleted: false, FailedAttempt(),
+            "The cluster refused to delete topic 'orders'. It was NOT modified.",
+            new InvalidOperationException("Broker: Topic authorization failed")));
+
+        var vm = await RecreateAndReturnVm(svc);
+
+        // Nothing happened, so retrying after fixing the permission is the reasonable next step.
+        Assert.True(vm.IsRecreatingTopic);
+    }
+
+    [Fact]
+    public async Task A_failure_before_anything_was_deleted_is_reported_plainly()
+    {
+        var svc = ServiceThatFailsRecreateWith(
+            new InvalidOperationException("Topic 'orders' has a single partition; there is nothing to reduce."));
+
+        var vm = await RecreateAndReturnVm(svc);
+
+        Assert.DoesNotContain("DATA LOSS RISK", vm.ErrorMessage);
+        Assert.Contains("nothing to reduce", vm.ErrorMessage);
     }
 
     [Fact]

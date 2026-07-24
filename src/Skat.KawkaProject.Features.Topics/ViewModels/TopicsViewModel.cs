@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using System.Reactive.Linq;
 using System.Windows.Input;
 using ReactiveUI;
+using Skat.KawkaProject.Core.Exceptions;
 using Skat.KawkaProject.Core.Interfaces;
 using Skat.KawkaProject.Core.Models;
 using Unit = System.Reactive.Unit;
@@ -159,23 +160,53 @@ public class TopicsViewModel : ReactiveObject, IRoutableViewModel
             await LoadTopicsAsync();
             await LoadDetailAsync(topicName);
         }
+        catch (TopicRecreateFailedException ex)
+        {
+            ErrorMessage = BuildRecreateFailureMessage(ex);
+
+            // Close the form when the topic may be gone. Leaving it open leaves a primed
+            // destructive button beside an already-typed confirmation name, and the next click
+            // both re-runs a destructive operation against a topic that may no longer exist and
+            // wipes the message that is currently the only record of how it was configured.
+            // A refused delete is different: nothing happened, and retrying is reasonable.
+            if (ex.TopicMayBeDeleted) IsRecreatingTopic = false;
+        }
         catch (Exception ex)
         {
-            bool? stillExists = null;
-            try
-            {
-                stillExists = (await _topicService.ListTopicsAsync(_session)).Any(t => t.Name == topicName);
-            }
-            catch
-            {
-                // Existence check itself failed; fall back to the original error below.
-            }
-
-            ErrorMessage = stillExists == false
-                ? $"Topic '{topicName}' was deleted but could not be recreated: {ex.Message}. You may need to recreate it manually."
-                : ex.Message;
+            ErrorMessage = ex.Message;
         }
         finally { IsBusy = false; }
+    }
+
+    /// <summary>
+    /// The service decides whether the data is at risk; this only decides how loudly to say it.
+    /// </summary>
+    /// <remarks>
+    /// The previous version asked the cluster whether the topic still existed and warned only when
+    /// it was already gone. That reads the wrong signal: Kafka deletion is asynchronous, so in the
+    /// likeliest failure — the propagation timeout — the topic is still listed at the moment of
+    /// failure. The user was told "timed out", concluded nothing had happened, and the deletion
+    /// completed behind them with nothing recreated.
+    /// </remarks>
+    private static string BuildRecreateFailureMessage(TopicRecreateFailedException ex)
+    {
+        // Not at risk: the service already explains what happened and that nothing was modified.
+        // Adding a scary prefix here would train the user to dismiss the ones that matter.
+        if (!ex.TopicMayBeDeleted) return ex.Message;
+
+        var overrides = ex.PreservedConfig.Count > 0
+            ? string.Join(", ", ex.PreservedConfig.Select(kv => $"{kv.Key}={kv.Value}"))
+            : "none";
+
+        // Everything needed to rebuild it by hand goes in the message: the topic is gone, so
+        // neither the topic list nor the detail panel can answer "what was it?" any more.
+        //
+        // The instruction stays "check it" rather than "recreate it": in one of these cases the
+        // service has just reported that something ELSE took the name back, and "recreate it
+        // manually" followed literally would mean deleting a topic that is not ours.
+        return $"DATA LOSS RISK: {ex.Message} Check '{ex.TopicName}' on your cluster before doing " +
+               $"anything else — it had {ex.Attempt.OriginalPartitionCount} partitions, replication " +
+               $"factor {ex.Attempt.ReplicationFactor}, config overrides: {overrides}.";
     }
 
     public async Task ExpandPartitionsAsync()

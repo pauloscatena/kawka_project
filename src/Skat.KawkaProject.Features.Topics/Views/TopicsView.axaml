@@ -62,9 +62,13 @@
                 BorderBrush="{DynamicResource StatusErrorBrush}" BorderThickness="0,0,0,1"
                 IsVisible="{Binding ErrorMessage, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
             <Grid ColumnDefinitions="*,Auto">
-                <TextBlock Grid.Column="0" Text="{Binding ErrorMessage}"
-                           Foreground="{DynamicResource StatusErrorBrush}"
-                           FontSize="11" TextWrapping="Wrap" />
+                <!-- Selectable, not a plain TextBlock: after a failed recreate this banner holds
+                     the partition count, replication factor and config overrides of a topic that
+                     no longer exists anywhere else. Someone rebuilding it with kafka-topics needs
+                     to copy those, not retype them from the screen at 2am. -->
+                <SelectableTextBlock Grid.Column="0" Text="{Binding ErrorMessage}"
+                                     Foreground="{DynamicResource StatusErrorBrush}"
+                                     FontSize="11" TextWrapping="Wrap" />
                 <Button Grid.Column="1" Command="{Binding DismissErrorCommand}"
                         Padding="4,0" Background="Transparent" BorderThickness="0"
                         Foreground="{DynamicResource TextMutedBrush}">✕</Button>

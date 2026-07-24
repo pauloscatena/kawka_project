@@ -162,6 +162,35 @@ public class CreateWithRetryTests
     }
 
     [Fact]
+    public async Task A_probe_that_itself_fails_still_reports_data_loss_rather_than_escaping_untyped()
+    {
+        // One network blip causes both halves of this: the create's response is lost, so attempt 2
+        // collides, and the probe that would resolve the collision hits the same outage.
+        //
+        // In C# an exception thrown INSIDE a catch block is not caught by that try's sibling
+        // catches. Without explicit handling it escapes as a bare KafkaException all the way to the
+        // caller, which has no way to know a delete ever happened - the user is shown
+        // "Local: Timed out" for a destroyed topic.
+        var calls = 0;
+
+        var ex = await Assert.ThrowsAsync<TopicRecreateFailedException>(() =>
+            TopicService.CreateWithRetryAsync(
+                Attempt(),
+                () =>
+                {
+                    if (++calls == 1) throw new KafkaException(ErrorCode.Local_Transport);
+                    throw Collision("orders");
+                },
+                () => throw new KafkaException(ErrorCode.Local_TimedOut),
+                3, NoDelay));
+
+        Assert.Equal(TopicRecreateStage.Creating, ex.Stage);
+        Assert.True(ex.TopicMayBeDeleted);
+        Assert.Equal("orders", ex.TopicName);
+        Assert.Equal("604800000", ex.PreservedConfig["retention.ms"]);
+    }
+
+    [Fact]
     public async Task A_deterministic_configuration_error_is_not_retried()
     {
         var calls = 0;
