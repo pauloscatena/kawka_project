@@ -249,27 +249,38 @@ public class TopicsViewModel : ReactiveObject, IRoutableViewModel
             // A refused delete is different: nothing happened, and retrying is reasonable.
             if (ex.TopicMayBeDeleted) ActiveForm = TopicsFormMode.None;
         }
-        catch (ArgumentException ex)
-        {
-            // In practice this is the service refusing after re-reading the live topic, because the
-            // VM's range check passed against a stale detail. That refusal happens before anything
-            // is deleted, hence no DATA LOSS RISK prefix. The saga wraps its own post-delete
-            // failures in TopicRecreateFailedException, caught above, so they cannot land here.
-            //
-            // ArgumentException.Message appends "(Parameter 'x')" to the sentence, and
-            // ArgumentOutOfRangeException adds "Actual value was N." on a following line. Both are
-            // framework tails; the sentence the service wrote is what belongs in the banner. Trim is
-            // load-bearing, not cosmetic: on Windows the message separator is CRLF, so splitting on
-            // '\n' leaves a stray '\r' at the end of the line.
-            var firstLine = ex.Message.Split('\n')[0];
-            var paren = firstLine.LastIndexOf(" (Parameter", StringComparison.Ordinal);
-            ErrorMessage = (paren >= 0 ? firstLine[..paren] : firstLine).Trim();
-        }
         catch (Exception ex)
         {
-            ErrorMessage = ex.Message;
+            // No DATA LOSS RISK prefix here: the saga wraps everything that can fail after the
+            // delete in TopicRecreateFailedException, caught above, so whatever lands here refused
+            // before touching the topic.
+            ErrorMessage = UserFacing(ex);
         }
         finally { IsBusy = false; }
+    }
+
+    /// <summary>
+    /// The sentence to put in the banner for an exception the app did not write itself.
+    /// </summary>
+    /// <remarks>
+    /// ArgumentException.Message appends "(Parameter 'x')" to the sentence, and
+    /// ArgumentOutOfRangeException adds "Actual value was N." on a following line. Those are
+    /// framework tails, sitting next to messages the rest of the app writes by hand - the sentence
+    /// the service wrote is the part that belongs on screen. Trim is load-bearing, not cosmetic: on
+    /// Windows the separator is CRLF, so splitting on '\n' leaves a stray '\r' behind.
+    /// <para>
+    /// Applied in every catch that shows a raw exception message, not just the recreate's: the
+    /// banner is the same banner, and a caller that starts validating its arguments locally should
+    /// not have to remember to add this.
+    /// </para>
+    /// </remarks>
+    private static string UserFacing(Exception ex)
+    {
+        if (ex is not ArgumentException) return ex.Message;
+
+        var firstLine = ex.Message.Split('\n')[0];
+        var paren = firstLine.LastIndexOf(" (Parameter", StringComparison.Ordinal);
+        return (paren >= 0 ? firstLine[..paren] : firstLine).Trim();
     }
 
     /// <summary>
@@ -390,7 +401,7 @@ public class TopicsViewModel : ReactiveObject, IRoutableViewModel
             await ReloadTopicsAsync();
             await LoadDetailAsync(topicName);
         }
-        catch (Exception ex) { ErrorMessage = ex.Message; }
+        catch (Exception ex) { ErrorMessage = UserFacing(ex); }
         finally { IsBusy = false; }
     }
 
@@ -408,7 +419,7 @@ public class TopicsViewModel : ReactiveObject, IRoutableViewModel
         {
             await ReloadTopicsAsync();
         }
-        catch (Exception ex) { ErrorMessage = ex.Message; }
+        catch (Exception ex) { ErrorMessage = UserFacing(ex); }
         finally { IsBusy = false; }
     }
 
@@ -445,7 +456,7 @@ public class TopicsViewModel : ReactiveObject, IRoutableViewModel
             }
             ApplyFilter();
         }
-        catch (Exception ex) { ErrorMessage = ex.Message; }
+        catch (Exception ex) { ErrorMessage = UserFacing(ex); }
         finally { IsBusy = false; }
     }
 
@@ -459,7 +470,7 @@ public class TopicsViewModel : ReactiveObject, IRoutableViewModel
             ActiveForm = TopicsFormMode.None;
             await LoadTopicsAsync();
         }
-        catch (Exception ex) { ErrorMessage = ex.Message; }
+        catch (Exception ex) { ErrorMessage = UserFacing(ex); }
         finally { IsBusy = false; }
     }
 
@@ -473,7 +484,7 @@ public class TopicsViewModel : ReactiveObject, IRoutableViewModel
             // different topics: expand/recreate read SelectedTopicDetail.Topic.Name while the
             // delete button's CommandParameter reads SelectedTopic.Name.
             SelectedTopicDetail = null;
-            ErrorMessage = ex.Message;
+            ErrorMessage = UserFacing(ex);
         }
     }
 

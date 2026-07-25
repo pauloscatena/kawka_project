@@ -22,6 +22,13 @@ internal static class TopicRecreateOperation
     /// <summary>How many consecutive polls must report the topic gone before we believe it.</summary>
     private const int RequiredConsecutiveAbsences = 2;
 
+    /// <summary>
+    /// Gap between the two metadata reads that must agree before the topic's shape is trusted. Same
+    /// reasoning as <see cref="RequiredConsecutiveAbsences"/>, applied to the other direction: back
+    /// to back reads would come off one warm cache and agree for the wrong reason.
+    /// </summary>
+    private static readonly TimeSpan MetadataConfirmationInterval = TimeSpan.FromMilliseconds(500);
+
     // Internal, not private: the retry unit tests pass their own attempt count, so nothing else in
     // the suite would notice these being set to "do not retry".
     internal static readonly TimeSpan CreateRetryDelay = TimeSpan.FromSeconds(2);
@@ -266,11 +273,28 @@ internal static class TopicRecreateOperation
                && topic.Partitions.Count == attempt.RequestedPartitionCount;
     }
 
-    // Reads the metadata; the judgement about what it says lives in TopicMetadataFacts.FactsFor,
-    // where it can be unit-tested. The states worth refusing here - a partition reporting an error,
-    // a replica list the broker omitted - cannot be produced by the healthy single-broker container
-    // the integration suite runs against, so a guard verified only through it is not verified.
+    // Reads the metadata; the judgement about what it says lives in TopicMetadataFacts, where it can
+    // be unit-tested. The states worth refusing here - a partition reporting an error, a replica
+    // list the broker omitted, two reads disagreeing - cannot be produced by the healthy
+    // single-broker container the integration suite runs against, so a guard verified only through
+    // it is not verified.
+    //
+    // Two reads that must agree, for the same reason WaitForTopicDeletionAsync demands two
+    // consecutive absences: Kafka's metadata protocol carries no completeness flag, so a partial
+    // answer from a broker whose cache is still warming is indistinguishable from a complete one.
+    // The delete path already refuses to act on a single sample; the shape the topic is rebuilt
+    // with - and the partition count recorded for manual recovery - deserves the same.
     private static async Task<(int PartitionCount, short ReplicationFactor)> GetTopicFactsAsync(
+        IAdminClient admin, string topicName)
+    {
+        var first = await ReadTopicFactsAsync(admin, topicName).ConfigureAwait(false);
+        await Task.Delay(MetadataConfirmationInterval).ConfigureAwait(false);
+        var second = await ReadTopicFactsAsync(admin, topicName).ConfigureAwait(false);
+
+        return TopicMetadataFacts.Agreed(first, second, topicName);
+    }
+
+    private static async Task<(int PartitionCount, short ReplicationFactor)> ReadTopicFactsAsync(
         IAdminClient admin, string topicName)
     {
         // Full-cluster metadata, NOT GetMetadata(topicName, ...): asking a broker about one named

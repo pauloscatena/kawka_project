@@ -729,6 +729,34 @@ public class TopicsViewModelTests
     }
 
     [Fact]
+    public async Task Expand_strips_the_same_dotnet_jargon_the_recreate_banner_does()
+    {
+        // The banner is shared, so the cleanup cannot belong to one command. Expand is the closest
+        // sibling - same panel, same partition-count argument, same service - and it was left
+        // showing raw ex.Message when the recreate stopped doing so.
+        var svc = new Mock<ITopicService>();
+        svc.Setup(s => s.ListTopicsAsync(It.IsAny<IKafkaSession>()))
+           .ReturnsAsync(new[] { new TopicInfo("orders", 4, 1) });
+        svc.Setup(s => s.GetTopicDetailAsync(It.IsAny<IKafkaSession>(), "orders"))
+           .ReturnsAsync(new TopicDetail(new TopicInfo("orders", 4, 1),
+               new List<PartitionInfo> { new(0, 1, 0, 0), new(1, 1, 0, 0), new(2, 1, 0, 0), new(3, 1, 0, 0) }));
+        svc.Setup(s => s.ExpandPartitionsAsync(It.IsAny<IKafkaSession>(), "orders", 8))
+           .ThrowsAsync(new ArgumentOutOfRangeException("newPartitionCount", 8,
+               "Kafka cannot reduce partitions: 'orders' already has 9."));
+
+        var vm = new TopicsViewModel(FakeScreen(), FakeSession(), svc.Object, NoOpNavigate);
+        await vm.LoadTopicsAsync();
+        vm.SelectedTopic = vm.Topics[0];
+        vm.ExpandToPartitionCount = 8;
+
+        await vm.ExpandPartitionsAsync();
+
+        Assert.Contains("Kafka cannot reduce partitions", vm.ErrorMessage);
+        Assert.DoesNotContain("Parameter", vm.ErrorMessage);
+        Assert.DoesNotContain("Actual value was", vm.ErrorMessage);
+    }
+
+    [Fact]
     public void The_recreate_warning_reads_its_consequences_from_the_canonical_list()
     {
         // The warning panel binds to these two properties. Restating the consequences in XAML - or

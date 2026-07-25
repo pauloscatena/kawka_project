@@ -92,4 +92,39 @@ public class TopicFactsTests
 
         Assert.Contains("no partitions", ex.Message, StringComparison.OrdinalIgnoreCase);
     }
+
+    [Fact]
+    public void Two_reads_that_agree_are_trusted()
+    {
+        Assert.Equal((6, (short)3), TopicMetadataFacts.Agreed((6, 3), (6, 3), "orders"));
+    }
+
+    [Fact]
+    public void A_partition_count_that_changes_between_reads_is_refused()
+    {
+        // A broker whose metadata cache is still warming after a restart answers with fewer
+        // partitions than the topic has, and nothing in the protocol marks that answer as partial.
+        // Acting on it recreates the topic fine - the user asked for a specific count - but records
+        // the undercount as OriginalPartitionCount, and that number is what the DATA LOSS RISK
+        // message tells the operator to rebuild with if the create then fails.
+        var ex = Assert.Throws<InvalidOperationException>(
+            () => TopicMetadataFacts.Agreed((3, 3), (6, 3), "orders"));
+
+        Assert.Contains("two different answers", ex.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("refusing", ex.Message, StringComparison.OrdinalIgnoreCase);
+        // Both readings belong in the message: the operator needs to see what changed.
+        Assert.Contains("3 partitions", ex.Message);
+        Assert.Contains("6 partitions", ex.Message);
+    }
+
+    [Fact]
+    public void A_replication_factor_that_changes_between_reads_is_refused()
+    {
+        // A reassignment completing mid-read. Rebuilding with either factor is a guess about
+        // durability, on a path that has already deleted the data by the time it matters.
+        var ex = Assert.Throws<InvalidOperationException>(
+            () => TopicMetadataFacts.Agreed((6, 2), (6, 3), "orders"));
+
+        Assert.Contains("refusing", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
 }

@@ -83,4 +83,31 @@ internal static class TopicMetadataFacts
 
         return (topic.Partitions.Count, replicationFactor);
     }
+
+    /// <summary>
+    /// The facts both metadata reads agreed on, or a refusal. Kafka's metadata protocol carries no
+    /// completeness flag, so a partial answer - a broker whose cache is still warming after a
+    /// restart - is indistinguishable from a complete one on a single read. Two that agree is the
+    /// same standard the deletion wait already applies before believing a topic is gone.
+    /// </summary>
+    /// <remarks>
+    /// A disagreement is refused rather than retried: the honest thing to tell the operator is that
+    /// the cluster is not answering consistently right now, not to keep sampling a moving target
+    /// until two reads happen to line up. What it protects is subtle but real - an undercount
+    /// silently becomes the OriginalPartitionCount recorded in TopicRecreateAttempt, which after a
+    /// failed create may be the only surviving record of how the topic was configured.
+    /// </remarks>
+    public static (int PartitionCount, short ReplicationFactor) Agreed(
+        (int PartitionCount, short ReplicationFactor) first,
+        (int PartitionCount, short ReplicationFactor) second,
+        string topicName)
+    {
+        if (first == second) return first;
+
+        throw new InvalidOperationException(
+            $"The cluster gave two different answers for '{topicName}' " +
+            $"({first.PartitionCount} partitions/RF {first.ReplicationFactor}, then " +
+            $"{second.PartitionCount} partitions/RF {second.ReplicationFactor}); " +
+            "refusing to recreate it until the answers are stable.");
+    }
 }

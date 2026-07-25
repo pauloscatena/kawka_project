@@ -554,4 +554,20 @@ git commit -m "refactor(kafka): dedup MetadataQueryTimeout into a shared interna
 - [x] `dotnet test` → todos verdes, com Docker rodando para os de integração
 - [x] Grafo de referências inalterado: `Core` ainda não referencia ninguém; `TopicRecreateOperation` não referencia `TopicService` nem vice-versa (`grep` do Task 5, Step 2)
 - [x] Os dois planos/specs da TUI (`2026-07-24-tui-headless.md`, `2026-07-24-tui-headless-design.md`) refletem a assinatura de 3 parâmetros de `DeleteAndRecreateTopicAsync` (Task 1) e o `DestructiveAction` do Core (Task 4)
-- [ ] Rodar `/powerpuff-review` sobre o diff deste plano, como fechamento — os cinco achados eram da revisão anterior; confirmar que as correções não introduziram novos
+- [x] Rodar `/powerpuff-review` sobre o diff deste plano, como fechamento — os cinco achados eram da revisão anterior; confirmar que as correções não introduziram novos
+
+## Fechamento da revisão (2026-07-25)
+
+A revisão de fechamento **encontrou achados novos**, ao contrário do que a linha acima antecipava. Vale registrar porque muda a leitura do gate de QA por task:
+
+**Buttercup achou um bug que os cinco gates de QA com mutação não pegaram** — e não por descuido dos gates: `GetTopicFactsAsync` validava a metadata com três guardas e devolvia sem checar o único número que a função existe para produzir. O RF é o mínimo entre partições, então uma partição com `Replicas` vazio o leva a 0 com todas as guardas passando; esse 0 só vira `TopicSpecification` dentro do retry de create, ou seja **depois do delete**, onde o broker o recusa como erro permanente. Tópico deletado, nada no lugar.
+
+A lição de processo: **os estados que essas guardas recusam são inalcançáveis contra o container single-broker saudável da suíte de integração.** Um gate que valida por integração + mutação não consegue, por construção, exercitar uma guarda cujo gatilho o ambiente de teste não produz. Guardas desse tipo precisam de teste unitário sobre uma função pura — foi para isso que a validação migrou para `TopicMetadataFacts.FactsFor`/`Agreed`.
+
+Corrigido em `0347060` e no commit seguinte:
+- guarda de RF < 1 e guarda de erro por partição, ambas antes de qualquer chamada destrutiva;
+- **duas leituras de metadata que precisam concordar** (`Agreed`), mesma disciplina que `RequiredConsecutiveAbsences` já aplicava ao delete — fecha a assimetria de o delete exigir duas amostras e a forma do tópico se contentar com uma;
+- manchete do painel derivada do Core: era literal no AXAML enquanto a linha de baixo omitia a perda de mensagens supondo que a manchete a declarava;
+- `UserFacing` aplicado em todos os catches da VM, fechando a dívida registrada no gate da Task 2 (`ExpandPartitionsAsync`/`DeleteTopicAsync`/`CreateTopicAsync` mostravam `ex.Message` cru).
+
+**Suíte final: 110 verdes** (7 Core, 44 Features, 59 Kafka com Docker).
