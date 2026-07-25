@@ -503,7 +503,7 @@ git commit -m "refactor(core): centralize destructive-action 'what is lost' as a
 **Interfaces:**
 - Produces: `internal static class KafkaTimeouts` com `public static readonly TimeSpan MetadataQueryTimeout = TimeSpan.FromSeconds(10);`.
 
-- [ ] **Step 1: Criar o tipo**
+- [x] **Step 1: Criar o tipo**
 
 Criar `Skat.KawkaProject.Kafka/KafkaTimeouts.cs`:
 
@@ -523,7 +523,7 @@ internal static class KafkaTimeouts
 }
 ```
 
-- [ ] **Step 2: Referenciar dos dois lados**
+- [x] **Step 2: Referenciar dos dois lados**
 
 Em `TopicService.cs`: remover `private static readonly TimeSpan MetadataQueryTimeout = TimeSpan.FromSeconds(10);` (linha 10) e trocar os usos (`GetMetadata(MetadataQueryTimeout)`) por `KafkaTimeouts.MetadataQueryTimeout`.
 
@@ -534,12 +534,12 @@ Confirmar que nenhuma das duas classes passou a referenciar a outra:
 Run: `grep -n 'TopicService\.' src/Skat.KawkaProject.Kafka/TopicRecreateOperation.cs; grep -n 'TopicRecreateOperation\.' src/Skat.KawkaProject.Kafka/TopicService.cs`
 Expected: vazio dos dois lados — ambos dependem só de `KafkaTimeouts`.
 
-- [ ] **Step 3: Rodar build + suíte (mesmo valor → tudo verde)**
+- [x] **Step 3: Rodar build + suíte (mesmo valor → tudo verde)**
 
 Run: `dotnet build && dotnet test`
 Expected: PASS, sem mudança de comportamento.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add -A

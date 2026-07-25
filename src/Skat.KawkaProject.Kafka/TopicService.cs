@@ -7,7 +7,6 @@ namespace Skat.KawkaProject.Kafka;
 
 public class TopicService : ITopicService
 {
-    private static readonly TimeSpan MetadataQueryTimeout  = TimeSpan.FromSeconds(10);
     private static readonly TimeSpan WatermarkQueryTimeout = TimeSpan.FromSeconds(5);
 
     private static AdminClientConfig AdminConfig(IKafkaSession session)
@@ -20,7 +19,7 @@ public class TopicService : ITopicService
     public async Task<IEnumerable<TopicInfo>> ListTopicsAsync(IKafkaSession session)
     {
         using var admin = new AdminClientBuilder(AdminConfig(session)).Build();
-        var meta = await Task.Run(() => admin.GetMetadata(MetadataQueryTimeout)).ConfigureAwait(false);
+        var meta = await Task.Run(() => admin.GetMetadata(KafkaTimeouts.MetadataQueryTimeout)).ConfigureAwait(false);
         return meta.Topics
             .Where(t => !t.Topic.StartsWith("__"))
             .Select(t => new TopicInfo(
@@ -37,7 +36,7 @@ public class TopicService : ITopicService
         // Full-cluster metadata, NOT GetMetadata(topicName, ...): the single-topic overload
         // auto-creates the topic when auto.create.topics.enable is on (the broker default), so
         // opening the detail view of a topic someone else just deleted would silently recreate it.
-        var meta = await Task.Run(() => admin.GetMetadata(MetadataQueryTimeout)).ConfigureAwait(false);
+        var meta = await Task.Run(() => admin.GetMetadata(KafkaTimeouts.MetadataQueryTimeout)).ConfigureAwait(false);
         var topicMeta = meta.Topics.FirstOrDefault(t => t.Topic == topicName)
             ?? throw new InvalidOperationException($"Topic '{topicName}' was not found on the cluster.");
 

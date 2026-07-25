@@ -17,7 +17,6 @@ internal static class TopicRecreateOperation
 {
     private static readonly TimeSpan DeletionPropagationGrace = TimeSpan.FromMilliseconds(500);
     private static readonly TimeSpan DeletionPollInterval     = TimeSpan.FromMilliseconds(500);
-    private static readonly TimeSpan MetadataQueryTimeout     = TimeSpan.FromSeconds(10);
     private static readonly TimeSpan DeletionTimeout          = TimeSpan.FromSeconds(30);
 
     /// <summary>How many consecutive polls must report the topic gone before we believe it.</summary>
@@ -259,7 +258,7 @@ internal static class TopicRecreateOperation
 
     private static async Task<bool> TopicMatchesRequestAsync(IAdminClient admin, TopicRecreateAttempt attempt)
     {
-        var meta = await Task.Run(() => admin.GetMetadata(MetadataQueryTimeout)).ConfigureAwait(false);
+        var meta = await Task.Run(() => admin.GetMetadata(KafkaTimeouts.MetadataQueryTimeout)).ConfigureAwait(false);
         var topic = meta.Topics.FirstOrDefault(t => t.Topic == attempt.TopicName);
 
         return topic is not null
@@ -274,7 +273,7 @@ internal static class TopicRecreateOperation
         // topic auto-creates it when auto.create.topics.enable is on (the default). That would turn
         // "recreate a topic whose name I typo'd" into "silently create a topic", and would make the
         // not-found check below unreachable.
-        var meta = await Task.Run(() => admin.GetMetadata(MetadataQueryTimeout)).ConfigureAwait(false);
+        var meta = await Task.Run(() => admin.GetMetadata(KafkaTimeouts.MetadataQueryTimeout)).ConfigureAwait(false);
         var topic = meta.Topics.FirstOrDefault(t => t.Topic == topicName);
 
         if (topic is null || topic.Error.Code == ErrorCode.UnknownTopicOrPart)
@@ -384,9 +383,9 @@ internal static class TopicRecreateOperation
             }
         }
 
-        // Budget note: a slow broker can burn the full MetadataQueryTimeout per attempt, so the
-        // worst case is ~3 polls inside DeletionTimeout, not the ~60 that "poll every 500ms for
-        // 30s" suggests at a glance.
+        // Budget note: a slow broker can burn the full KafkaTimeouts.MetadataQueryTimeout per
+        // attempt, so the worst case is ~3 polls inside DeletionTimeout, not the ~60 that "poll
+        // every 500ms for 30s" suggests at a glance.
         var detail = lastException is not null
             ? $" Last metadata error: {lastException.Message}"
             : " Metadata queries succeeded, but the cluster kept reporting the topic or kept " +
@@ -400,7 +399,7 @@ internal static class TopicRecreateOperation
 
     private static async Task<bool> TopicIsAbsentAsync(IAdminClient admin, string topicName)
     {
-        var meta = await Task.Run(() => admin.GetMetadata(MetadataQueryTimeout)).ConfigureAwait(false);
+        var meta = await Task.Run(() => admin.GetMetadata(KafkaTimeouts.MetadataQueryTimeout)).ConfigureAwait(false);
         return meta.Topics.All(t => t.Topic != topicName);
     }
 }
