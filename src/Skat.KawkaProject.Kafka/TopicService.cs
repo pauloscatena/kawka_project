@@ -37,6 +37,20 @@ public class TopicService : ITopicService
         ErrorCode.PolicyViolation
     };
 
+    /// <summary>
+    /// Derives a topic's replication factor from its per-partition replica counts. Internal so the
+    /// non-uniform case can be unit-tested; a single-broker container cannot produce one.
+    /// </summary>
+    internal static short ReplicationFactorOf(IEnumerable<int> replicaCountsPerPartition)
+    {
+        // Minimum, not the first partition's count. A non-uniform assignment (an interrupted
+        // reassignment) would otherwise report partition 0's factor, and a recreate built from it
+        // would ask for that factor uniformly - misrepresenting the topic's real durability. The
+        // minimum tells the truth about the weakest partition. DefaultIfEmpty avoids the
+        // IndexOutOfRange the old Partitions[0] indexing threw for a topic reporting no partitions.
+        return (short)replicaCountsPerPartition.DefaultIfEmpty(0).Min();
+    }
+
     private static AdminClientConfig AdminConfig(IKafkaSession session)
     {
         var cfg = new AdminClientConfig();
@@ -53,7 +67,7 @@ public class TopicService : ITopicService
             .Select(t => new TopicInfo(
                 t.Topic,
                 t.Partitions.Count,
-                (short)t.Partitions[0].Replicas.Length));
+                ReplicationFactorOf(t.Partitions.Select(p => p.Replicas.Length))));
     }
 
     public async Task<TopicDetail> GetTopicDetailAsync(IKafkaSession session, string topicName)
@@ -83,14 +97,8 @@ public class TopicService : ITopicService
             return new PartitionInfo(p.PartitionId, p.Leader, wm.Low.Value, wm.High.Value);
         }).ToList()).ConfigureAwait(false);
 
-        // NOTE, both left for Task 10 of the plan to keep this task's diff reviewable on its own:
-        // deriving the replication factor from partition 0 is wrong for a topic with a non-uniform
-        // assignment, and indexing Partitions[0] at all is unguarded - a topic that exists but
-        // reports zero partitions would throw IndexOutOfRange here. GetPartitionCountAsync below
-        // guards exactly that case; this method and ListTopicsAsync do not. Not reproducible on a
-        // KRaft single-node broker, but the three should agree.
         var info = new TopicInfo(topicMeta.Topic, partitions.Count,
-            (short)topicMeta.Partitions[0].Replicas.Length);
+            ReplicationFactorOf(topicMeta.Partitions.Select(p => p.Replicas.Length)));
         return new TopicDetail(info, partitions);
     }
 
