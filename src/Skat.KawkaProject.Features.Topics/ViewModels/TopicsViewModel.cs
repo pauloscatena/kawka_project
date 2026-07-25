@@ -204,7 +204,9 @@ public class TopicsViewModel : ReactiveObject, IRoutableViewModel
         {
             await _topicService.DeleteAndRecreateTopicAsync(_session, topicName, requestedCount, replicationFactor);
             ActiveForm = TopicsFormMode.None;
-            await LoadTopicsAsync();
+            // ReloadTopicsAsync, not LoadTopicsAsync: IsBusy must stay true until the finally below,
+            // through the detail load and reselect that follow.
+            await ReloadTopicsAsync();
             await LoadDetailAsync(topicName);
             ReselectTopicByName(topicName);
         }
@@ -267,8 +269,7 @@ public class TopicsViewModel : ReactiveObject, IRoutableViewModel
     {
         try
         {
-            _allTopics = (await _topicService.ListTopicsAsync(_session)).ToList();
-            ApplyFilter();
+            await ReloadTopicsAsync();
 
             if (_allTopics.Any(t => t.Name == topicName))
             {
@@ -342,7 +343,8 @@ public class TopicsViewModel : ReactiveObject, IRoutableViewModel
         {
             await _topicService.ExpandPartitionsAsync(_session, topicName, requestedCount);
             ActiveForm = TopicsFormMode.None;
-            await LoadTopicsAsync();
+            // ReloadTopicsAsync, not LoadTopicsAsync: keep IsBusy true through the detail load.
+            await ReloadTopicsAsync();
             await LoadDetailAsync(topicName);
         }
         catch (Exception ex) { ErrorMessage = ex.Message; }
@@ -361,11 +363,23 @@ public class TopicsViewModel : ReactiveObject, IRoutableViewModel
         ErrorMessage = null;
         try
         {
-            _allTopics = (await _topicService.ListTopicsAsync(_session)).ToList();
-            ApplyFilter();
+            await ReloadTopicsAsync();
         }
         catch (Exception ex) { ErrorMessage = ex.Message; }
         finally { IsBusy = false; }
+    }
+
+    /// <summary>
+    /// Refreshes the topic list WITHOUT touching IsBusy. Callers already inside a busy operation
+    /// (recreate/expand success paths, the post-failure resync) must use this, not LoadTopicsAsync:
+    /// that method's own finally would clear IsBusy mid-operation, re-enabling every gated control
+    /// while a detail load is still in flight - the delete button goes live on the just-recreated
+    /// topic, and a concurrent selection desyncs the panel from the list.
+    /// </summary>
+    private async Task ReloadTopicsAsync()
+    {
+        _allTopics = (await _topicService.ListTopicsAsync(_session)).ToList();
+        ApplyFilter();
     }
 
     public async Task DeleteTopicAsync(string topicName)

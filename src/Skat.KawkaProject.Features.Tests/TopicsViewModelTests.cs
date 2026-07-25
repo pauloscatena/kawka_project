@@ -333,6 +333,49 @@ public class TopicsViewModelTests
     }
 
     [Fact]
+    public async Task IsBusy_stays_true_across_the_whole_successful_recreate_including_the_reload()
+    {
+        var detail4 = new TopicDetail(new TopicInfo("orders", 4, 1),
+            new List<PartitionInfo> { new(0, 1, 0, 0), new(1, 1, 0, 0), new(2, 1, 0, 0), new(3, 1, 0, 0) });
+
+        // The post-recreate detail load is gated so we can inspect IsBusy while the operation is
+        // still in flight, AFTER the internal reload has run.
+        var detailGate = new TaskCompletionSource<TopicDetail>();
+        Func<Task<TopicDetail>> detailProvider = () => Task.FromResult(detail4);
+
+        var svc = new Mock<ITopicService>();
+        svc.Setup(s => s.ListTopicsAsync(It.IsAny<IKafkaSession>()))
+           .ReturnsAsync(new[] { new TopicInfo("orders", 4, 1) });
+        svc.Setup(s => s.GetTopicDetailAsync(It.IsAny<IKafkaSession>(), "orders"))
+           .Returns(() => detailProvider());
+        svc.Setup(s => s.DeleteAndRecreateTopicAsync(It.IsAny<IKafkaSession>(), "orders", 2, (short)1))
+           .Returns(Task.CompletedTask);
+
+        var vm = new TopicsViewModel(FakeScreen(), FakeSession(), svc.Object, NoOpNavigate);
+        await vm.LoadTopicsAsync();
+        vm.SelectedTopic = vm.Topics[0];
+        vm.ShowRecreateFormCommand.Execute(null);
+        vm.RecreateConfirmName = "orders";
+        vm.RecreatePartitionCount = 2;
+
+        // From here on, the detail load blocks on the gate.
+        detailProvider = () => detailGate.Task;
+        var running = vm.RecreateTopicAsync();
+
+        // The reload (LoadTopicsAsync) has run; the detail load is now suspended on the gate. The
+        // whole point of the gating this branch introduced is that NOTHING is clickable until the
+        // operation finishes. If the nested LoadTopicsAsync's own finally cleared IsBusy, the UI
+        // re-enabled mid-operation - the delete button goes live on the just-recreated topic and a
+        // concurrent selection can desync panel from list.
+        Assert.False(vm.IsNotBusy);
+
+        detailGate.SetResult(detail4);
+        await running;
+
+        Assert.True(vm.IsNotBusy);
+    }
+
+    [Fact]
     public async Task IsNotBusy_tracks_IsBusy_and_notifies_while_an_operation_is_in_flight()
     {
         var svc = new Mock<ITopicService>();
