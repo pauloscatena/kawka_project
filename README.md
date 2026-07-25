@@ -15,7 +15,7 @@ It didn't. So we built it.
 ## Features
 
 - Manage multiple Kafka connections with persistent profiles (no-auth, SASL Plaintext, SASL SSL, mutual TLS)
-- **Topics** — list, filter, create (name / partitions / replication factor), delete with confirmation, inspect partition offsets
+- **Topics** — list, filter, create (name / partitions / replication factor), delete with confirmation, inspect partition offsets, grow the partition count, and shrink it by recreating the topic
 - **Messages** — fetch by partition/offset range, live tail, produce (with topic autocomplete), client-side text filter, JSON pretty-print, key display
 - **Cluster** — broker list, consumer groups, partition lag per group
 - Dark / Light theme toggle
@@ -37,16 +37,22 @@ src/
 │   │   ├── ITopicService.cs
 │   │   ├── IMessageService.cs
 │   │   └── IClusterService.cs
-│   └── Models/
-│       ├── ConnectionProfile.cs           # Auth config (AuthType: None/SaslPlaintext/SaslSsl/Ssl)
-│       ├── TopicInfo.cs / TopicDetail.cs
-│       ├── KafkaMessage.cs
-│       └── BrokerInfo.cs / PartitionInfo.cs / PartitionLag.cs / ConsumerGroupInfo.cs
+│   ├── Models/
+│   │   ├── ConnectionProfile.cs           # Auth config (AuthType: None/SaslPlaintext/SaslSsl/Ssl)
+│   │   ├── TopicInfo.cs / TopicDetail.cs
+│   │   ├── KafkaMessage.cs
+│   │   ├── DestructiveAction.cs           # Canonical "what a destructive op loses / keeps"
+│   │   └── BrokerInfo.cs / PartitionInfo.cs / PartitionLag.cs / ConsumerGroupInfo.cs
+│   └── Exceptions/
+│       └── TopicRecreateFailedException.cs  # Carries the failed stage + everything needed to rebuild
 │
 ├── Skat.KawkaProject.Kafka/               # Confluent.Kafka implementations of Core interfaces
 │   ├── KafkaConnectionFactory.cs          # Opens a session (validates connectivity via GetMetadata)
 │   ├── KafkaSession.cs                    # Holds bootstrap + auth; applies to producer/consumer configs
-│   ├── TopicService.cs
+│   ├── TopicService.cs                    # Thin adapter over AdminClient
+│   ├── TopicRecreateOperation.cs          # Delete-and-recreate saga (kept out of the adapter)
+│   ├── TopicMetadataFacts.cs              # Pure derivations + the guards that refuse a bad recreate
+│   ├── KafkaTimeouts.cs
 │   ├── MessageService.cs                  # Fetch (Task.Run wrapper), Tail (IObservable), Produce
 │   ├── ClusterService.cs
 │   └── ConnectionProfileRepository.cs    # JSON persistence to OS app-data folder
@@ -83,6 +89,7 @@ src/
 | Navigation | `RoutingState` + `RoutedViewHost`; views resolved via Splat locator (`IViewFor<TViewModel>`) |
 | Confirmation dialogs | `Interaction<TInput, TOutput>` on ViewModel; handler registered in View's `WhenActivated` |
 | Async Kafka calls | `consumer.Consume()` is blocking — always wrapped in `Task.Run` to keep UI thread free |
+| Destructive operations | The saga owns the facts: it re-reads live metadata and refuses rather than trusting a value the UI passed in. Warning text comes from `DestructiveAction`, one list shared by every frontend |
 | Live tail | `IObservable<KafkaMessage>` backed by a background `Task.Run` loop, observed on `RxApp.MainThreadScheduler` |
 | Dependency injection | `Microsoft.Extensions.DependencyInjection`; services wired in `App.axaml.cs` |
 | Profile persistence | `ConnectionProfileRepository` → `profiles.json` in the OS application-data folder |
@@ -97,6 +104,29 @@ User clicks Fetch
                     └─► returns IEnumerable<KafkaMessage>
                           └─► Messages.Clear() + Add()          [back on UI thread via await]
 ```
+
+---
+
+## Changing a topic's partition count
+
+Kafka treats the two directions very differently, and so does kawka.
+
+**Growing** is a normal admin call. Existing records stay where they are, but the key-to-partition mapping changes for everything written afterwards — so records sharing a key can land in a different partition than their predecessors, and per-key ordering is not preserved across the change.
+
+**Shrinking is not something Kafka can do.** There is no in-place operation, so kawka deletes the topic and creates it again with fewer partitions. That is destructive and irreversible:
+
+| | |
+|---|---|
+| Destroyed | every message in the topic; committed consumer group offsets — depending on `auto.offset.reset`, consumers may then silently skip or replay records |
+| Preserved | topic-level config overrides, read back and reapplied by kawka |
+| Unaffected | literal ACLs bound to the same topic name — they survive, so there is nothing to re-grant |
+
+Because the operation cannot be undone, it is gated:
+
+- You must type the topic name to arm the button, and the whole UI stays disabled until the operation settles.
+- The replication factor is **derived from the live topic**, never from what the screen happened to be showing — a reassignment that completed since the panel loaded cannot silently change durability. A non-uniform assignment is flattened to its weakest partition.
+- Before anything is deleted, kawka refuses the operation outright if the cluster cannot answer for the topic consistently: a partition reporting an error, a replica list that came back empty, or two metadata reads that disagree with each other. A number accepted here would only be rejected by the broker *after* the delete, leaving the topic gone and nothing in its place.
+- If the recreate does fail after the delete, the error message carries everything needed to rebuild the topic by hand — partition count, replication factor and config overrides — because at that point the topic list can no longer answer "what was it?".
 
 ---
 
@@ -181,7 +211,17 @@ cd src
 dotnet test
 ```
 
-Tests use **xUnit** and **Moq**. Feature ViewModel tests (`Skat.KawkaProject.Features.Tests`) run entirely in-process with mocked services — no live Kafka needed. Integration tests in `Skat.KawkaProject.Kafka.Tests` require a reachable broker.
+Tests use **xUnit**, with **Moq** in the ViewModel and Core suites.
+
+| Suite | Needs | Notes |
+|---|---|---|
+| `Skat.KawkaProject.Core.Tests` | nothing | Pure domain logic |
+| `Skat.KawkaProject.Features.Tests` | nothing | ViewModels in-process against mocked services |
+| `Skat.KawkaProject.Kafka.Tests` | **Docker running** | Spins up its own broker per class via `Testcontainers.Kafka` — you do *not* need to point it at an existing cluster |
+
+Without Docker the Kafka suite fails to start rather than skipping, so run `docker info` first if it errors out. Expect the Kafka suite to take a few minutes: each test class starts a real broker container.
+
+Some behaviour cannot be reached through a healthy single-broker container at all — a partition reporting an error, a replica list the broker omitted, two metadata reads disagreeing. Those guards are covered by unit tests over pure functions (`TopicFactsTests`, `ReplicationFactorTests`) precisely because the integration suite would stay green if they were removed.
 
 ---
 
