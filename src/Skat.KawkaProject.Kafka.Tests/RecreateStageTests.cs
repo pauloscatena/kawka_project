@@ -34,7 +34,7 @@ public class RecreateStageTests
         // delete.topic.enable=false, or an ACL denial. The controller answered with a per-topic
         // error precisely because it did not execute the delete, so the topic is intact.
         var ex = await Assert.ThrowsAsync<TopicRecreateFailedException>(() =>
-            TopicService.RunRecreateStagesAsync(
+            TopicRecreateOperation.RunRecreateStagesAsync(
                 Attempt,
                 deleteTopic: () => Boom(BrokerRefused(ErrorCode.InvalidRequest, "Broker: Invalid request")),
                 waitForDeletion: Ok,
@@ -54,7 +54,7 @@ public class RecreateStageTests
         // A timeout or transport failure: the request may have reached the controller and only the
         // response was lost. This is the genuinely ambiguous case, and it must warn.
         var ex = await Assert.ThrowsAsync<TopicRecreateFailedException>(() =>
-            TopicService.RunRecreateStagesAsync(
+            TopicRecreateOperation.RunRecreateStagesAsync(
                 Attempt,
                 deleteTopic: () => Boom(new KafkaException(ErrorCode.Local_TimedOut)),
                 waitForDeletion: Ok,
@@ -70,7 +70,7 @@ public class RecreateStageTests
         // DeleteTopicsException carrying a LOCAL code is not a broker refusal - the discriminator
         // is the error's origin, not the exception type.
         var ex = await Assert.ThrowsAsync<TopicRecreateFailedException>(() =>
-            TopicService.RunRecreateStagesAsync(
+            TopicRecreateOperation.RunRecreateStagesAsync(
                 Attempt,
                 deleteTopic: () => Boom(BrokerRefused(ErrorCode.Local_TimedOut, "Local: Timed out")),
                 waitForDeletion: Ok,
@@ -85,7 +85,7 @@ public class RecreateStageTests
         // The plan's own motivating scenario: the delete was accepted, propagation is slow, we time
         // out. The topic is on its way out and nothing was put back.
         var ex = await Assert.ThrowsAsync<TopicRecreateFailedException>(() =>
-            TopicService.RunRecreateStagesAsync(
+            TopicRecreateOperation.RunRecreateStagesAsync(
                 Attempt,
                 deleteTopic: Ok,
                 waitForDeletion: () => Boom(new TimeoutException("did not disappear in time")),
@@ -100,7 +100,7 @@ public class RecreateStageTests
     public async Task Every_failure_carries_what_is_needed_to_rebuild_the_topic()
     {
         var ex = await Assert.ThrowsAsync<TopicRecreateFailedException>(() =>
-            TopicService.RunRecreateStagesAsync(
+            TopicRecreateOperation.RunRecreateStagesAsync(
                 Attempt,
                 deleteTopic: Ok,
                 waitForDeletion: () => Boom(new TimeoutException("nope")),
@@ -116,7 +116,7 @@ public class RecreateStageTests
     {
         var created = false;
 
-        await TopicService.RunRecreateStagesAsync(
+        await TopicRecreateOperation.RunRecreateStagesAsync(
             Attempt, deleteTopic: Ok, waitForDeletion: Ok,
             createWithRetry: () => { created = true; return Task.CompletedTask; });
 
@@ -130,7 +130,7 @@ public class RecreateStageTests
             TopicRecreateStage.Creating, true, Attempt, "already translated", new Exception("inner"));
 
         var ex = await Assert.ThrowsAsync<TopicRecreateFailedException>(() =>
-            TopicService.RunRecreateStagesAsync(
+            TopicRecreateOperation.RunRecreateStagesAsync(
                 Attempt, deleteTopic: Ok, waitForDeletion: Ok, createWithRetry: () => Boom(original)));
 
         Assert.Same(original, ex);

@@ -42,10 +42,10 @@ public class CreateWithRetryTests
         // Every other test here passes its own attempt count, so all of them stay green if the
         // production constants are set to "do not retry" - silently removing the retry from the
         // one call that runs after the user's topic has already been deleted.
-        Assert.True(TopicService.CreateAttempts > 1,
-            $"CreateAttempts is {TopicService.CreateAttempts}: the recreate would give up on the " +
+        Assert.True(TopicRecreateOperation.CreateAttempts > 1,
+            $"CreateAttempts is {TopicRecreateOperation.CreateAttempts}: the recreate would give up on the " +
             "user's topic after a single transient failure.");
-        Assert.True(TopicService.CreateRetryDelay > TimeSpan.Zero,
+        Assert.True(TopicRecreateOperation.CreateRetryDelay > TimeSpan.Zero,
             "Retrying with no delay retries into the same transient failure.");
     }
 
@@ -54,7 +54,7 @@ public class CreateWithRetryTests
     {
         var calls = 0;
 
-        await TopicService.CreateWithRetryAsync(
+        await TopicRecreateOperation.CreateWithRetryAsync(
             Attempt(), () => { calls++; return Task.CompletedTask; }, Matches(true), 3, NoDelay);
 
         Assert.Equal(1, calls);
@@ -65,7 +65,7 @@ public class CreateWithRetryTests
     {
         var calls = 0;
 
-        await TopicService.CreateWithRetryAsync(
+        await TopicRecreateOperation.CreateWithRetryAsync(
             Attempt(),
             () =>
             {
@@ -83,7 +83,7 @@ public class CreateWithRetryTests
         var calls = 0;
 
         var ex = await Assert.ThrowsAsync<TopicRecreateFailedException>(() =>
-            TopicService.CreateWithRetryAsync(
+            TopicRecreateOperation.CreateWithRetryAsync(
                 Attempt(),
                 () => { calls++; throw new KafkaException(ErrorCode.Local_Transport); },
                 Matches(false), 3, NoDelay));
@@ -112,7 +112,7 @@ public class CreateWithRetryTests
 
         // The response to attempt 1 was lost but the topic WAS created, so attempt 2 collides and
         // the cluster confirms 2 partitions - our create did land.
-        await TopicService.CreateWithRetryAsync(
+        await TopicRecreateOperation.CreateWithRetryAsync(
             Attempt(),
             () =>
             {
@@ -131,7 +131,7 @@ public class CreateWithRetryTests
         // topic with the ORIGINAL partition count. Reporting success here tells the user their
         // shrink happened when it did not - with the data already destroyed.
         var ex = await Assert.ThrowsAsync<TopicRecreateFailedException>(() =>
-            TopicService.CreateWithRetryAsync(
+            TopicRecreateOperation.CreateWithRetryAsync(
                 Attempt(), () => throw Collision("orders"), Matches(false), 3, NoDelay));
 
         Assert.Equal(TopicRecreateStage.Creating, ex.Stage);
@@ -148,7 +148,7 @@ public class CreateWithRetryTests
         var calls = 0;
 
         var ex = await Assert.ThrowsAsync<TopicRecreateFailedException>(() =>
-            TopicService.CreateWithRetryAsync(
+            TopicRecreateOperation.CreateWithRetryAsync(
                 Attempt(),
                 () => (++calls) switch
                 {
@@ -174,7 +174,7 @@ public class CreateWithRetryTests
         var calls = 0;
 
         var ex = await Assert.ThrowsAsync<TopicRecreateFailedException>(() =>
-            TopicService.CreateWithRetryAsync(
+            TopicRecreateOperation.CreateWithRetryAsync(
                 Attempt(),
                 () =>
                 {
@@ -196,7 +196,7 @@ public class CreateWithRetryTests
         var calls = 0;
 
         var ex = await Assert.ThrowsAsync<TopicRecreateFailedException>(() =>
-            TopicService.CreateWithRetryAsync(
+            TopicRecreateOperation.CreateWithRetryAsync(
                 Attempt(),
                 () => { calls++; throw BadReplicationFactor("orders"); },
                 Matches(false), 3, TimeSpan.FromSeconds(2)));

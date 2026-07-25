@@ -31,7 +31,7 @@ public class WaitForTopicDeletionTests
         var answers = new Queue<bool>(new[] { true, false, true, true });
         var calls = 0;
 
-        await TopicService.WaitForTopicDeletionAsync(
+        await TopicRecreateOperation.WaitForTopicDeletionAsync(
             "t", Scripted(answers, () => calls++), NoDelay, NoDelay, Budget);
 
         Assert.Equal(4, calls);
@@ -44,7 +44,7 @@ public class WaitForTopicDeletionTests
         var answers = new Queue<bool>(new[] { true, true });
         var calls = 0;
 
-        await TopicService.WaitForTopicDeletionAsync(
+        await TopicRecreateOperation.WaitForTopicDeletionAsync(
             "t", Scripted(answers, () => calls++), NoDelay, NoDelay, Budget);
 
         // Exactly two: it must not keep polling after the second consecutive absence.
@@ -60,7 +60,7 @@ public class WaitForTopicDeletionTests
         // past the deadline. Without the post-loop confirmation this throws TimeoutException for a
         // deletion that actually completed — and downstream that becomes a data-loss warning shown
         // to a user whose topic is fine.
-        await TopicService.WaitForTopicDeletionAsync(
+        await TopicRecreateOperation.WaitForTopicDeletionAsync(
             "t",
             () => { calls++; return Task.FromResult(true); },
             grace: NoDelay,
@@ -74,7 +74,7 @@ public class WaitForTopicDeletionTests
     public async Task A_topic_that_never_disappears_times_out()
     {
         var ex = await Assert.ThrowsAsync<TimeoutException>(() =>
-            TopicService.WaitForTopicDeletionAsync(
+            TopicRecreateOperation.WaitForTopicDeletionAsync(
                 "stubborn",
                 () => Task.FromResult(false),
                 grace: NoDelay,
@@ -104,7 +104,7 @@ public class WaitForTopicDeletionTests
             };
         }
 
-        await TopicService.WaitForTopicDeletionAsync("t", Probe, NoDelay, NoDelay, Budget);
+        await TopicRecreateOperation.WaitForTopicDeletionAsync("t", Probe, NoDelay, NoDelay, Budget);
 
         // 1 absent, 2 throws (streak reset), 3 absent, 4 absent -> returns on the fourth.
         Assert.Equal(4, calls);
@@ -124,7 +124,7 @@ public class WaitForTopicDeletionTests
         }
 
         var ex = await Assert.ThrowsAsync<TimeoutException>(() =>
-            TopicService.WaitForTopicDeletionAsync(
+            TopicRecreateOperation.WaitForTopicDeletionAsync(
                 "t", Probe, NoDelay, TimeSpan.FromMilliseconds(5), TimeSpan.FromMilliseconds(60)));
 
         Assert.DoesNotContain("leader not available", ex.Message);
