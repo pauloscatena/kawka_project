@@ -7,6 +7,12 @@ namespace Skat.KawkaProject.Core.Models;
 /// HOW the operation is confirmed (modal vs type-the-name) is a per-frontend concern and is NOT
 /// modelled here.
 /// </summary>
+/// <remarks>
+/// Compare instances by TopicName and Verb, not with ==. The generated record equality compares the
+/// two list members by reference, so two actions with identical contents built from separately
+/// allocated lists are NOT equal - a test asserting equality against an inline-built expectation
+/// would fail for a reason that has nothing to do with what it is testing.
+/// </remarks>
 public sealed record DestructiveAction(
     string TopicName,
     string Verb,
@@ -25,14 +31,16 @@ public sealed record DestructiveAction(
 
     /// <summary>What a shrink-by-recreate destroys. ACLs are deliberately excluded: literal ACLs on
     /// the same topic name survive delete+recreate, so claiming they are lost would be wrong.</summary>
-    public static IReadOnlyList<string> RecreateLoses { get; } = new[] { LostMessages, LostOffsets };
+    // AsReadOnly, not the bare array: IReadOnlyList over string[] is castable back to string[], and
+    // these are process-wide statics behind every destructive warning the app shows. One stray cast
+    // writing to index 0 would rewrite that warning for every frontend until restart.
+    public static IReadOnlyList<string> RecreateLoses { get; } =
+        Array.AsReadOnly(new[] { LostMessages, LostOffsets });
 
     /// <summary>What survives it. Kept beside the losses because a warning that omits this sends the
     /// user to re-apply settings the operation already carried over.</summary>
-    public static IReadOnlyList<string> RecreatePreserves { get; } = new[]
-    {
-        "topic-level config overrides"
-    };
+    public static IReadOnlyList<string> RecreatePreserves { get; } =
+        Array.AsReadOnly(new[] { "topic-level config overrides" });
 
     /// <summary>The recreate of a specific topic. Callers that only need the wording (a static
     /// warning panel) can read the lists directly instead of naming a topic.</summary>

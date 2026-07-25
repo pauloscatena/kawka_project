@@ -78,18 +78,32 @@ public class TopicsViewModel : ReactiveObject, IRoutableViewModel
     }
     public bool CanConfirmRecreate => SelectedTopicDetail != null && _recreateConfirmName == SelectedTopicDetail.Topic.Name;
 
-    // The warning panel reads the recreate's consequences from the domain instead of restating them
-    // in XAML, so the GUI, the service doc-comment and the planned TUI cannot drift apart. Both
-    // halves are shown: losses alone would send the user to re-apply config the saga carries over.
-    // These are constants of the operation, not of the selected topic - the wording never names it -
-    // so they need no change notification.
+    // The three lines of the recreate warning panel in TopicsView.axaml. All three derive from
+    // DestructiveAction, so the GUI, the service contract and the planned TUI cannot drift apart on
+    // what a recreate destroys. They are constants of the operation, not of the selected topic -
+    // the wording never names it - so they need no change notification.
     //
-    // LostMessages is filtered out because the red headline right above this line already states it,
-    // and repeating it in body text right below dilutes the one sentence meant to stop the user.
-    // Filtered by identity rather than by position so adding a consequence to the canonical list
-    // still surfaces here. Frontends without their own headline (the TUI) use the full list.
-    public string RecreateWhatIsLost =>
-        $"Also not carried over: {string.Join("; ", DestructiveAction.RecreateLoses.Where(l => l != DestructiveAction.LostMessages))}.";
+    // The split between the headline and the line below it is this ViewModel's call about how to
+    // present one canonical list in this frontend, and BOTH halves come from the list. Deriving the
+    // headline here rather than writing it into the XAML is what makes the filtering below safe:
+    // otherwise the panel would depend on a literal in the View continuing to mention messages, and
+    // an editor shortening that sentence would silently leave the worst consequence off the screen.
+
+    /// <summary>The severity line, in red. Carries the message loss on its own.</summary>
+    public string RecreateHeadline =>
+        $"This deletes and recreates the topic. It permanently destroys {DestructiveAction.LostMessages}, and cannot be undone.";
+
+    /// <summary>
+    /// Everything else the recreate destroys - the message loss is excluded because
+    /// <see cref="RecreateHeadline"/> already carries it, and repeating it in body text directly
+    /// below dilutes the one sentence meant to stop the user. Excluded by identity rather than by
+    /// position, so a consequence added to the canonical list still surfaces here. Deliberately a
+    /// partial inventory: a caller that needs the whole list wants DestructiveAction.RecreateLoses.
+    /// </summary>
+    public string RecreateAdditionalLosses =>
+        $"Beyond the messages, this also destroys: {string.Join("; ", DestructiveAction.RecreateLoses.Where(l => l != DestructiveAction.LostMessages))}.";
+
+    /// <summary>What survives, so the user does not go re-apply settings the saga carried over.</summary>
     public string RecreateWhatIsPreserved => $"Preserved: {string.Join("; ", DestructiveAction.RecreatePreserves)}.";
 
     public Interaction<string, bool> ConfirmDelete { get; } = new();
@@ -237,13 +251,16 @@ public class TopicsViewModel : ReactiveObject, IRoutableViewModel
         }
         catch (ArgumentException ex)
         {
-            // Reached when the VM's range check passed against a stale detail and the service
-            // refused after re-reading the live topic. Nothing was deleted: this is a refusal,
-            // not a failure mid-saga, so no DATA LOSS RISK prefix.
+            // In practice this is the service refusing after re-reading the live topic, because the
+            // VM's range check passed against a stale detail. That refusal happens before anything
+            // is deleted, hence no DATA LOSS RISK prefix. The saga wraps its own post-delete
+            // failures in TopicRecreateFailedException, caught above, so they cannot land here.
             //
             // ArgumentException.Message appends "(Parameter 'x')" to the sentence, and
             // ArgumentOutOfRangeException adds "Actual value was N." on a following line. Both are
-            // framework tails; the sentence the service wrote is what belongs in the banner.
+            // framework tails; the sentence the service wrote is what belongs in the banner. Trim is
+            // load-bearing, not cosmetic: on Windows the message separator is CRLF, so splitting on
+            // '\n' leaves a stray '\r' at the end of the line.
             var firstLine = ex.Message.Split('\n')[0];
             var paren = firstLine.LastIndexOf(" (Parameter", StringComparison.Ordinal);
             ErrorMessage = (paren >= 0 ? firstLine[..paren] : firstLine).Trim();

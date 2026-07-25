@@ -231,15 +231,20 @@
                         <StackPanel Spacing="6">
                             <TextBlock Text="⚠ Recreate with fewer partitions" FontSize="11" FontWeight="Bold"
                                        Foreground="{DynamicResource StatusErrorBrush}" />
-                            <TextBlock Text="This deletes and recreates the topic. All messages in this topic will be permanently lost. This cannot be undone."
+                            <!-- All three lines come from DestructiveAction via the ViewModel. Do not
+                                 replace any of them with literal text: RecreateAdditionalLosses
+                                 deliberately omits the message loss because RecreateHeadline carries
+                                 it, so a hardcoded headline that stops mentioning messages would
+                                 leave the worst consequence off the panel entirely. -->
+                            <TextBlock Text="{Binding RecreateHeadline}"
                                        FontSize="10" TextWrapping="Wrap"
                                        Foreground="{DynamicResource StatusErrorBrush}" />
-                            <TextBlock Text="{Binding RecreateWhatIsLost}"
+                            <TextBlock Text="{Binding RecreateAdditionalLosses}"
                                        FontSize="10" TextWrapping="Wrap"
                                        Foreground="{DynamicResource TextPrimaryBrush}" />
                             <TextBlock Text="{Binding RecreateWhatIsPreserved}"
                                        FontSize="10" TextWrapping="Wrap"
-                                       Foreground="{DynamicResource TextPrimaryBrush}" />
+                                       Foreground="{DynamicResource TextMutedBrush}" />
                             <StackPanel Orientation="Horizontal" Spacing="6">
                                 <TextBlock FontSize="11" Foreground="{DynamicResource TextMutedBrush}"
                                            VerticalAlignment="Center">New count:</TextBlock>

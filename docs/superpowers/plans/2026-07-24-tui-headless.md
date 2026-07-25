@@ -2427,7 +2427,16 @@ public sealed class InteractiveConfirmer(IAnsiConsole console, Func<string?> rea
                 $"[bold red]This will {Markup.Escape(action.Verb)} '{Markup.Escape(action.TopicName)}'. It cannot be undone.[/]",
                 "",
                 "[red]Permanently lost:[/]"
-            }.Concat(action.WhatIsLost.Select(w => $"  • {Markup.Escape(w)}")))))
+            }
+            .Concat(action.WhatIsLost.Select(w => $"  • {Markup.Escape(w)}"))
+            // WhatIsPreserved is not decoration: a prompt that lists only the losses sends the
+            // operator to re-apply config the saga already carried over. The TUI has no headline of
+            // its own, so it renders the canonical lists whole - both halves.
+            .Concat(action.WhatIsPreserved.Count == 0 ? Array.Empty<string>() : new[]
+            {
+                "",
+                "[green]Preserved:[/]"
+            }.Concat(action.WhatIsPreserved.Select(w => $"  • {Markup.Escape(w)}"))))))
         {
             Border = BoxBorder.Heavy,
             BorderStyle = new Style(Color.Red),

@@ -736,19 +736,27 @@ public class TopicsViewModelTests
         // drifted into three lists that could disagree about what a recreate destroys.
         var vm = new TopicsViewModel(FakeScreen(), FakeSession(), Mock.Of<ITopicService>(), NoOpNavigate);
 
-        // Every consequence except the message loss, which the red headline above the panel states
-        // instead - see the comment on RecreateWhatIsLost.
-        foreach (var loss in DestructiveAction.RecreateLoses.Where(l => l != DestructiveAction.LostMessages))
-            Assert.Contains(loss, vm.RecreateWhatIsLost);
+        // Every consequence has to reach the panel through one of the two lines. Asserting the
+        // union rather than each line's own filter is the point: a filter that starts dropping
+        // something no other line picks up fails here, which asserting "RecreateAdditionalLosses
+        // contains everything except LostMessages" could never do - that just restates the filter.
+        var panel = vm.RecreateHeadline + " " + vm.RecreateAdditionalLosses;
+        foreach (var loss in DestructiveAction.RecreateLoses)
+            Assert.Contains(loss, panel);
         foreach (var kept in DestructiveAction.RecreatePreserves)
             Assert.Contains(kept, vm.RecreateWhatIsPreserved);
 
+        // The message loss belongs to the headline alone - stated once, in red, not echoed in body
+        // text directly below it.
+        Assert.Contains(DestructiveAction.LostMessages, vm.RecreateHeadline);
+        Assert.DoesNotContain(DestructiveAction.LostMessages, vm.RecreateAdditionalLosses);
+
         // The user is told which setting decides between skipping and replaying, not just that one
         // of the two will happen.
-        Assert.Contains("auto.offset.reset", vm.RecreateWhatIsLost);
+        Assert.Contains("auto.offset.reset", vm.RecreateAdditionalLosses);
 
         // The halves must not be swapped: config overrides survive, messages do not.
-        Assert.DoesNotContain("config", vm.RecreateWhatIsLost, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("config", vm.RecreateAdditionalLosses, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("message", vm.RecreateWhatIsPreserved, StringComparison.OrdinalIgnoreCase);
     }
 }

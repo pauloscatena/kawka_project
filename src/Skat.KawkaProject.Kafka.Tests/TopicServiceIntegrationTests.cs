@@ -308,7 +308,7 @@ public class TopicServiceIntegrationTests : IAsyncLifetime
         var svc = new TopicService();
         await svc.CreateTopicAsync(session, "rf-live", 4, 1);
 
-        // Assinatura nova: sem replicationFactor. A saga tem de derivar RF=1 do tópico vivo.
+        // No replicationFactor argument: the saga has to derive RF=1 from the live topic.
         await svc.DeleteAndRecreateTopicAsync(session, "rf-live", 2);
 
         var detail = await svc.GetTopicDetailAsync(session, "rf-live");

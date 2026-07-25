@@ -23,10 +23,12 @@ public interface ITopicService
     /// place, so this is destructive: <b>ALL MESSAGES IN THE TOPIC ARE PERMANENTLY LOST</b>.
     /// <para>
     /// What is lost and what survives is enumerated once, in
-    /// <see cref="Skat.KawkaProject.Core.Models.DestructiveAction.Recreate"/>: read it there rather
-    /// than restating it, so a frontend's warning cannot drift from this contract. Config overrides
-    /// are carried over (see <see cref="GetTopicConfigOverridesAsync"/>). ACLs are not on the loss
-    /// list: literal ACLs on the same topic name survive delete+recreate.
+    /// <see cref="Skat.KawkaProject.Core.Models.DestructiveAction"/> - read the lists there rather
+    /// than restating them here, so a frontend's warning cannot drift from this contract.
+    /// <see cref="GetTopicConfigOverridesAsync"/> is what reads the preserved side back.
+    /// One thing worth stating because its absence from the list looks like an omission: ACLs are
+    /// deliberately NOT on the loss list, because literal ACLs on the same topic name survive
+    /// delete+recreate.
     /// </para>
     /// <para>
     /// The replication factor is derived from the live topic; a non-uniform assignment is flattened

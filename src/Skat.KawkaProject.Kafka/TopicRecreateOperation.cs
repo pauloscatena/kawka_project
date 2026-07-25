@@ -266,41 +266,19 @@ internal static class TopicRecreateOperation
                && topic.Partitions.Count == attempt.RequestedPartitionCount;
     }
 
+    // Reads the metadata; the judgement about what it says lives in TopicMetadataFacts.FactsFor,
+    // where it can be unit-tested. The states worth refusing here - a partition reporting an error,
+    // a replica list the broker omitted - cannot be produced by the healthy single-broker container
+    // the integration suite runs against, so a guard verified only through it is not verified.
     private static async Task<(int PartitionCount, short ReplicationFactor)> GetTopicFactsAsync(
         IAdminClient admin, string topicName)
     {
         // Full-cluster metadata, NOT GetMetadata(topicName, ...): asking a broker about one named
         // topic auto-creates it when auto.create.topics.enable is on (the default). That would turn
         // "recreate a topic whose name I typo'd" into "silently create a topic", and would make the
-        // not-found check below unreachable.
+        // not-found check unreachable.
         var meta = await Task.Run(() => admin.GetMetadata(KafkaTimeouts.MetadataQueryTimeout)).ConfigureAwait(false);
-        var topic = meta.Topics.FirstOrDefault(t => t.Topic == topicName);
-
-        if (topic is null || topic.Error.Code == ErrorCode.UnknownTopicOrPart)
-        {
-            throw new InvalidOperationException(
-                $"Topic '{topicName}' was not found on the cluster; refusing to recreate it.");
-        }
-
-        // A topic that exists can still answer with a transient error (LeaderNotAvailable during an
-        // election, for instance). Reporting that as "not found" would be a lie; both refuse, but
-        // only one of them tells the operator what to actually go and look at.
-        if (topic.Error.IsError)
-        {
-            throw new InvalidOperationException(
-                $"Could not read metadata for topic '{topicName}': {topic.Error.Reason}. " +
-                "Refusing to recreate it until the cluster answers reliably.");
-        }
-
-        if (topic.Partitions.Count == 0)
-        {
-            throw new InvalidOperationException(
-                $"Topic '{topicName}' reported no partitions; refusing to recreate it.");
-        }
-
-        // .Replicas is int[] (same access ListTopicsAsync/GetTopicDetailAsync already use: .Length).
-        return (topic.Partitions.Count, TopicMetadataFacts.ReplicationFactorOf(
-            topic.Partitions.Select(p => p.Replicas.Length)));
+        return TopicMetadataFacts.FactsFor(meta.Topics.FirstOrDefault(t => t.Topic == topicName), topicName);
     }
 
     private static Task WaitForTopicDeletionAsync(IAdminClient admin, string topicName) =>
