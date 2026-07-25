@@ -1,4 +1,4 @@
-namespace Skat.KawkaProject.Core.Models;
+namespace Skat.KawkaProject.Features.Topics;
 
 /// <summary>
 /// Which inline form is open in the topics detail panel. Modelled as one value rather than N

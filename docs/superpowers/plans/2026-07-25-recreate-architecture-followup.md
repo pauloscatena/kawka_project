@@ -326,6 +326,8 @@ git add src/Skat.KawkaProject.Features.Topics/ViewModels/TopicsViewModel.cs src/
 git commit -m "fix(topics): strip .NET argument-exception tails from the error banner"
 ```
 
+> **Dívida registrada no gate de QA da Task 2 (não corrigida — fora do escopo):** `ExpandPartitionsAsync`, `DeleteTopicAsync` e `CreateTopicAsync` na mesma VM continuam com `catch (Exception ex) { ErrorMessage = ex.Message; }` puro. O QA verificou que hoje esses fluxos só delegam ao `AdminClient`, cujas falhas de validação chegam como `CreateTopicsException`/`DeleteTopicsException` do broker — não `ArgumentException` client-side —, então o jargão não é atingível por ali. Fica como inconsistência de UX a fechar se algum desses caminhos passar a validar argumentos localmente.
+
 ---
 
 ## Task 3: Mover `TopicsFormMode` do Core para Features.Topics
@@ -339,12 +341,12 @@ Enum de estado de UI ("which inline form is open in the topics detail panel") mo
 **Interfaces:**
 - Consumes/Produces: `enum TopicsFormMode { None, Create, Expand, Recreate }` — mesma forma, novo namespace `Skat.KawkaProject.Features.Topics`.
 
-- [ ] **Step 1: Confirmar consumidor único**
+- [x] **Step 1: Confirmar consumidor único**
 
 Run: `grep -rn 'TopicsFormMode' src --include='*.cs' | grep -v '/obj/'`
 Expected: ocorrências só em `Core/Models/TopicsFormMode.cs` e `Features.Topics/ViewModels/TopicsViewModel.cs`. Se aparecer em outro lugar, parar e reavaliar — a premissa "consumidor único" mudou.
 
-- [ ] **Step 2: Mover o arquivo e ajustar o namespace**
+- [x] **Step 2: Mover o arquivo e ajustar o namespace**
 
 ```bash
 git mv src/Skat.KawkaProject.Core/Models/TopicsFormMode.cs src/Skat.KawkaProject.Features.Topics/TopicsFormMode.cs
@@ -352,19 +354,21 @@ git mv src/Skat.KawkaProject.Core/Models/TopicsFormMode.cs src/Skat.KawkaProject
 
 Editar `src/Skat.KawkaProject.Features.Topics/TopicsFormMode.cs`: trocar `namespace Skat.KawkaProject.Core.Models;` por `namespace Skat.KawkaProject.Features.Topics;`. Manter o resto (o doc-comment e o enum) intacto.
 
-- [ ] **Step 3: Ajustar o using no VM**
+- [x] **Step 3: Ajustar o using no VM**
 
 Em `TopicsViewModel.cs`, o `ActiveForm`/`TopicsFormMode` era resolvido via `using Skat.KawkaProject.Core.Models;`. O novo namespace `Skat.KawkaProject.Features.Topics` é o namespace-pai do VM (`...Features.Topics.ViewModels`), então NÃO é auto-visível. Adicionar `using Skat.KawkaProject.Features.Topics;` no topo do `TopicsViewModel.cs`.
+
+> **Correção na execução (2026-07-25):** a premissa acima está errada. Em C#, um namespace aninhado (`...Features.Topics.ViewModels`) enxerga os tipos do namespace-pai (`...Features.Topics`) sem `using`. O build passou com 0 erros sem nenhum using adicional, e ele NÃO foi acrescentado — seria ruído.
 
 Run: `dotnet build 2>&1 | grep -E "error CS"`
 Expected: se aparecer "TopicsFormMode não encontrado", faltou o using — adicionar. Corrigir até limpar.
 
-- [ ] **Step 4: Rodar a suíte (movimentação pura → tudo verde sem tocar asserção)**
+- [x] **Step 4: Rodar a suíte (movimentação pura → tudo verde sem tocar asserção)**
 
 Run: `dotnet build && dotnet test`
 Expected: PASS, 94 verdes, nenhuma asserção alterada. Se algum teste referenciava `Core.Models.TopicsFormMode`, ajustar o using dele também (grep do Step 1 já teria mostrado).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add -A
