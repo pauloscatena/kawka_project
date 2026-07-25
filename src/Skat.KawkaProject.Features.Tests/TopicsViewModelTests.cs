@@ -9,6 +9,14 @@ namespace Skat.KawkaProject.Features.Tests;
 
 public class TopicsViewModelTests
 {
+    // NOTE for anyone adding a delayed mock: assigning vm.SelectedTopic starts a fire-and-forget
+    // LoadDetailAsync (the SelectedTopic setter), and these tests rely on SelectedTopicDetail being
+    // populated by the next line. That only holds because Moq's ReturnsAsync hands back an
+    // already-completed task and the continuation runs inline. Give GetTopicDetailAsync a real
+    // delay and tests start seeing a null SelectedTopicDetail for reasons invisible in the body.
+    // Prefer mutable state via ReturnsAsync(() => ...) + Callback over SetupSequence: the
+    // constructor's own fire-and-forget LoadTopicsAsync consumes one step of a sequence before the
+    // test body runs, so a sequence describes the wrong phase.
     private static readonly Action<string, int> NoOpNavigate = (_, _) => { };
 
     private static IScreen FakeScreen()
@@ -51,9 +59,14 @@ public class TopicsViewModelTests
         var vm = new TopicsViewModel(FakeScreen(), FakeSession(), svc.Object, NoOpNavigate);
         vm.ConfirmDelete.RegisterHandler(ctx => ctx.SetOutput(true));
         await vm.LoadTopicsAsync();
+        Assert.Contains(vm.Topics, t => t.Name == "to-delete");
+
         await vm.DeleteTopicAsync("to-delete");
 
         svc.Verify(s => s.DeleteTopicAsync(It.IsAny<IKafkaSession>(), "to-delete"), Times.Once);
+        // The name promises the collection is updated, not just that the service was called: without
+        // this the RemoveAll + ApplyFilter in DeleteTopicAsync could be deleted and the test stayed green.
+        Assert.DoesNotContain(vm.Topics, t => t.Name == "to-delete");
     }
 
     [Fact]
@@ -610,9 +623,17 @@ public class TopicsViewModelTests
         Assert.Contains("Enter", vm.ErrorMessage);
     }
 
-    [Fact]
-    public async Task RecreateTopicAsync_rejects_count_outside_valid_range()
+    [Theory]
+    [InlineData(0)]    // below the minimum
+    [InlineData(-1)]   // negative
+    [InlineData(4)]    // equal to current - not fewer
+    [InlineData(5)]    // above current
+    public async Task RecreateTopicAsync_rejects_a_count_outside_1_to_current_minus_1(int requested)
     {
+        // The original test only exercised the upper bound (4 vs 4), so tightening the guard to
+        // reject 0 would have kept it green while breaking nothing it claimed to cover. The lower
+        // bounds are not reachable through NumericUpDown's Minimum="1", but the guard is
+        // defense-in-depth and a second caller (a future CLI) is not bound by the spinner.
         var svc = new Mock<ITopicService>();
         var detail = new TopicDetail(new TopicInfo("orders", 4, 1),
             new List<PartitionInfo> { new(0, 1, 0, 0), new(1, 1, 0, 0), new(2, 1, 0, 0), new(3, 1, 0, 0) });
@@ -623,7 +644,7 @@ public class TopicsViewModelTests
         await vm.LoadTopicsAsync();
         vm.SelectedTopic = vm.Topics[0];
         vm.RecreateConfirmName = "orders";
-        vm.RecreatePartitionCount = 4;
+        vm.RecreatePartitionCount = requested;
 
         await vm.RecreateTopicAsync();
 
