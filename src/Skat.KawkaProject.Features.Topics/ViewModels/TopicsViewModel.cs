@@ -30,7 +30,7 @@ public class TopicsViewModel : ReactiveObject, IRoutableViewModel
     private int _newTopicPartitions = 1;
     private int _newTopicReplicationFactor = 1;
     private bool _isExpandingPartitions;
-    private int? _newPartitionCount = 1;
+    private int? _expandToPartitionCount = 1;
     private bool _isRecreatingTopic;
     private int? _recreatePartitionCount = 1;
     private string _recreateConfirmName = "";
@@ -45,10 +45,10 @@ public class TopicsViewModel : ReactiveObject, IRoutableViewModel
     // Nullable because NumericUpDown.Value is decimal?: clearing the box must mean "no value", not
     // silently keep the previous one - which, on a destructive recreate, means running with a count
     // the user never chose and cannot see.
-    public int? NewPartitionCount { get => _newPartitionCount; set => this.RaiseAndSetIfChanged(ref _newPartitionCount, value); }
+    public int? ExpandToPartitionCount { get => _expandToPartitionCount; set => this.RaiseAndSetIfChanged(ref _expandToPartitionCount, value); }
     public bool IsRecreatingTopic { get => _isRecreatingTopic; private set { this.RaiseAndSetIfChanged(ref _isRecreatingTopic, value); this.RaisePropertyChanged(nameof(IsNotRecreatingTopic)); } }
     public bool IsNotRecreatingTopic => !_isRecreatingTopic;
-    /// <summary>Nullable for the same reason as <see cref="NewPartitionCount"/>.</summary>
+    /// <summary>Nullable for the same reason as <see cref="ExpandToPartitionCount"/>.</summary>
     public int? RecreatePartitionCount { get => _recreatePartitionCount; set => this.RaiseAndSetIfChanged(ref _recreatePartitionCount, value); }
     public string RecreateConfirmName
     {
@@ -139,7 +139,7 @@ public class TopicsViewModel : ReactiveObject, IRoutableViewModel
         ShowExpandFormCommand = ReactiveCommand.Create(() =>
         {
             IsExpandingPartitions = true;
-            NewPartitionCount = (SelectedTopicDetail?.Partitions.Count ?? 0) + 1;
+            ExpandToPartitionCount = (SelectedTopicDetail?.Partitions.Count ?? 0) + 1;
         });
         CancelExpandCommand = ReactiveCommand.Create(() => IsExpandingPartitions = false);
         ExpandPartitionsCommand = ReactiveCommand.CreateFromTask(ExpandPartitionsAsync);
@@ -185,7 +185,7 @@ public class TopicsViewModel : ReactiveObject, IRoutableViewModel
         ErrorMessage = null;
         try
         {
-            await _topicService.RecreateTopicWithFewerPartitionsAsync(_session, topicName, requestedCount, replicationFactor);
+            await _topicService.DeleteAndRecreateTopicAsync(_session, topicName, requestedCount, replicationFactor);
             IsRecreatingTopic = false;
             await LoadTopicsAsync();
             await LoadDetailAsync(topicName);
@@ -307,7 +307,7 @@ public class TopicsViewModel : ReactiveObject, IRoutableViewModel
     {
         if (SelectedTopicDetail == null) return;
         var currentCount = SelectedTopicDetail.Partitions.Count;
-        if (_newPartitionCount is not int requestedCount)
+        if (_expandToPartitionCount is not int requestedCount)
         {
             ErrorMessage = "Enter the new partition count.";
             return;
@@ -332,10 +332,10 @@ public class TopicsViewModel : ReactiveObject, IRoutableViewModel
         finally { IsBusy = false; }
     }
 
-    public void ViewPartitionMessages(int partition)
+    public void ViewPartitionMessages(int partitionId)
     {
         if (SelectedTopicDetail == null) return;
-        _onViewPartitionMessages(SelectedTopicDetail.Topic.Name, partition);
+        _onViewPartitionMessages(SelectedTopicDetail.Topic.Name, partitionId);
     }
 
     public async Task LoadTopicsAsync()

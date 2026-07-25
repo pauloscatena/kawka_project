@@ -140,7 +140,7 @@ public class TopicService : ITopicService
             .ToDictionary(e => e.Name, e => e.Value);
     }
 
-    public async Task RecreateTopicWithFewerPartitionsAsync(
+    public async Task DeleteAndRecreateTopicAsync(
         IKafkaSession session, string topicName, int newPartitionCount, short replicationFactor)
     {
         using var admin = new AdminClientBuilder(AdminConfig(session)).Build();

@@ -17,5 +17,25 @@ public interface ITopicService
     /// topic has no configuration".
     /// </summary>
     Task<IReadOnlyDictionary<string, string>> GetTopicConfigOverridesAsync(IKafkaSession session, string topicName);
-    Task RecreateTopicWithFewerPartitionsAsync(IKafkaSession session, string topicName, int newPartitionCount, short replicationFactor);
+
+    /// <summary>
+    /// DELETES the topic and recreates it with fewer partitions. Kafka cannot shrink partitions in
+    /// place, so this is destructive: <b>ALL MESSAGES IN THE TOPIC ARE PERMANENTLY LOST</b>.
+    /// <para>
+    /// Carried over: topic-level config overrides (see <see cref="GetTopicConfigOverridesAsync"/>).
+    /// NOT carried over: messages, committed consumer group offsets (consumers may then silently
+    /// skip or replay records), and ACLs.
+    /// </para>
+    /// <para>
+    /// Callers MUST obtain explicit user confirmation before calling this. Throws
+    /// <see cref="System.ArgumentOutOfRangeException"/> if <paramref name="newPartitionCount"/> is
+    /// not in [1, current-1], <see cref="System.InvalidOperationException"/> if the topic has a
+    /// single partition or the cluster does not confirm it reliably (unknown, transient metadata
+    /// error, or no partitions reported), and
+    /// <see cref="Skat.KawkaProject.Core.Exceptions.TopicRecreateFailedException"/> (carrying the
+    /// failed stage, whether the topic may be gone, and everything needed to rebuild it) on any
+    /// failure during the sequence.
+    /// </para>
+    /// </summary>
+    Task DeleteAndRecreateTopicAsync(IKafkaSession session, string topicName, int newPartitionCount, short replicationFactor);
 }

@@ -52,7 +52,7 @@ public class TopicServiceIntegrationTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task RecreateTopicWithFewerPartitionsAsync_reports_the_stage_and_preserves_config_when_the_create_fails()
+    public async Task DeleteAndRecreateTopicAsync_reports_the_stage_and_preserves_config_when_the_create_fails()
     {
         using var session = Session();
         var svc = new TopicService();
@@ -75,7 +75,7 @@ public class TopicServiceIntegrationTests : IAsyncLifetime
         // Replication factor 99 on a single-broker container makes CreateTopics fail AFTER the
         // delete has already happened - the exact failure mode the user must survive.
         var ex = await Assert.ThrowsAsync<TopicRecreateFailedException>(
-            () => svc.RecreateTopicWithFewerPartitionsAsync(session, "fail-topic", 2, 99));
+            () => svc.DeleteAndRecreateTopicAsync(session, "fail-topic", 2, 99));
 
         Assert.Equal(TopicRecreateStage.Creating, ex.Stage);
         Assert.True(ex.TopicMayBeDeleted);
@@ -86,7 +86,7 @@ public class TopicServiceIntegrationTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task RecreateTopicWithFewerPartitionsAsync_does_not_claim_data_loss_when_it_fails_before_deleting()
+    public async Task DeleteAndRecreateTopicAsync_does_not_claim_data_loss_when_it_fails_before_deleting()
     {
         using var session = Session();
         var svc = new TopicService();
@@ -95,7 +95,7 @@ public class TopicServiceIntegrationTests : IAsyncLifetime
         // ThrowsAsync matches the type exactly, so this also asserts it is NOT the typed
         // TopicRecreateFailedException - a pre-delete failure must never carry a data-loss verdict.
         await Assert.ThrowsAsync<InvalidOperationException>(
-            () => svc.RecreateTopicWithFewerPartitionsAsync(session, "absent-topic", 1, 1));
+            () => svc.DeleteAndRecreateTopicAsync(session, "absent-topic", 1, 1));
     }
 
     [Fact]
@@ -196,7 +196,7 @@ public class TopicServiceIntegrationTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task RecreateTopicWithFewerPartitionsAsync_reduces_partitions_and_preserves_config()
+    public async Task DeleteAndRecreateTopicAsync_reduces_partitions_and_preserves_config()
     {
         using var session = Session();
         var adminCfg = new AdminClientConfig { BootstrapServers = _kafka.GetBootstrapAddress() };
@@ -221,7 +221,7 @@ public class TopicServiceIntegrationTests : IAsyncLifetime
         }
 
         var svc = new TopicService();
-        await svc.RecreateTopicWithFewerPartitionsAsync(session, "shrink-topic", 2, 1);
+        await svc.DeleteAndRecreateTopicAsync(session, "shrink-topic", 2, 1);
 
         var detail = await svc.GetTopicDetailAsync(session, "shrink-topic");
         Assert.Equal(2, detail.Partitions.Count);
@@ -236,7 +236,7 @@ public class TopicServiceIntegrationTests : IAsyncLifetime
     [InlineData(-1)]
     [InlineData(4)]
     [InlineData(9)]
-    public async Task RecreateTopicWithFewerPartitionsAsync_rejects_invalid_count_without_deleting(int requested)
+    public async Task DeleteAndRecreateTopicAsync_rejects_invalid_count_without_deleting(int requested)
     {
         using var session = Session();
         var svc = new TopicService();
@@ -244,7 +244,7 @@ public class TopicServiceIntegrationTests : IAsyncLifetime
         await svc.CreateTopicAsync(session, topic, 4, 1);
 
         await Assert.ThrowsAsync<ArgumentOutOfRangeException>(
-            () => svc.RecreateTopicWithFewerPartitionsAsync(session, topic, requested, 1));
+            () => svc.DeleteAndRecreateTopicAsync(session, topic, requested, 1));
 
         // The guard must run BEFORE the delete: the topic has to be untouched.
         var detail = await svc.GetTopicDetailAsync(session, topic);
@@ -252,23 +252,23 @@ public class TopicServiceIntegrationTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task RecreateTopicWithFewerPartitionsAsync_rejects_unknown_topic()
+    public async Task DeleteAndRecreateTopicAsync_rejects_unknown_topic()
     {
         using var session = Session();
         var svc = new TopicService();
 
         await Assert.ThrowsAsync<InvalidOperationException>(
-            () => svc.RecreateTopicWithFewerPartitionsAsync(session, "no-such-topic-here", 1, 1));
+            () => svc.DeleteAndRecreateTopicAsync(session, "no-such-topic-here", 1, 1));
     }
 
     [Fact]
-    public async Task RecreateTopicWithFewerPartitionsAsync_does_not_auto_create_the_topic_it_rejects()
+    public async Task DeleteAndRecreateTopicAsync_does_not_auto_create_the_topic_it_rejects()
     {
         using var session = Session();
         var svc = new TopicService();
 
         await Assert.ThrowsAsync<InvalidOperationException>(
-            () => svc.RecreateTopicWithFewerPartitionsAsync(session, "never-existed", 1, 1));
+            () => svc.DeleteAndRecreateTopicAsync(session, "never-existed", 1, 1));
 
         // Asking a broker for metadata about a single named topic auto-creates it when
         // auto.create.topics.enable is on. Rejecting a typo'd name must not create it.
@@ -279,7 +279,7 @@ public class TopicServiceIntegrationTests : IAsyncLifetime
     [Theory]
     [InlineData(3, 1)]   // lower bound: reduce all the way to a single partition
     [InlineData(4, 3)]   // upper bound: reduce by exactly one
-    public async Task RecreateTopicWithFewerPartitionsAsync_accepts_both_ends_of_the_valid_range(
+    public async Task DeleteAndRecreateTopicAsync_accepts_both_ends_of_the_valid_range(
         int initialCount, int requested)
     {
         using var session = Session();
@@ -287,7 +287,7 @@ public class TopicServiceIntegrationTests : IAsyncLifetime
         var topic = $"bound-topic-{initialCount}-{requested}";
         await svc.CreateTopicAsync(session, topic, initialCount, 1);
 
-        await svc.RecreateTopicWithFewerPartitionsAsync(session, topic, requested, 1);
+        await svc.DeleteAndRecreateTopicAsync(session, topic, requested, 1);
 
         // Without this, tightening the guard to `newPartitionCount <= 1` would keep every other
         // test green while breaking the most common real request: shrink down to one partition.
@@ -296,14 +296,14 @@ public class TopicServiceIntegrationTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task RecreateTopicWithFewerPartitionsAsync_explains_that_a_single_partition_cannot_shrink()
+    public async Task DeleteAndRecreateTopicAsync_explains_that_a_single_partition_cannot_shrink()
     {
         using var session = Session();
         var svc = new TopicService();
         await svc.CreateTopicAsync(session, "solo-topic", 1, 1);
 
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(
-            () => svc.RecreateTopicWithFewerPartitionsAsync(session, "solo-topic", 1, 1));
+            () => svc.DeleteAndRecreateTopicAsync(session, "solo-topic", 1, 1));
 
         Assert.Contains("nothing to reduce", ex.Message);
         Assert.DoesNotContain("between 1 and 0", ex.Message);

@@ -169,7 +169,7 @@
                             <StackPanel Orientation="Horizontal" Spacing="6">
                                 <TextBlock FontSize="11" Foreground="{DynamicResource TextMutedBrush}"
                                            VerticalAlignment="Center">New count:</TextBlock>
-                                <NumericUpDown Value="{Binding NewPartitionCount}" Minimum="1"
+                                <NumericUpDown Value="{Binding ExpandToPartitionCount}" Minimum="1"
                                                Width="110" FontSize="11" />
                             </StackPanel>
                             <StackPanel Orientation="Horizontal" Spacing="6">

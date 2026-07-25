@@ -113,7 +113,7 @@ public class TopicsViewModelTests
         var vm = new TopicsViewModel(FakeScreen(), FakeSession(), svc.Object, NoOpNavigate);
         await vm.LoadTopicsAsync();
         vm.SelectedTopic = vm.Topics[0];
-        vm.NewPartitionCount = 4;
+        vm.ExpandToPartitionCount = 4;
 
         await vm.ExpandPartitionsAsync();
 
@@ -135,7 +135,7 @@ public class TopicsViewModelTests
         var vm = new TopicsViewModel(FakeScreen(), FakeSession(), svc.Object, NoOpNavigate);
         await vm.LoadTopicsAsync();
         vm.SelectedTopic = vm.Topics[0];
-        vm.NewPartitionCount = 2;
+        vm.ExpandToPartitionCount = 2;
 
         await vm.ExpandPartitionsAsync();
 
@@ -151,7 +151,7 @@ public class TopicsViewModelTests
             new List<PartitionInfo> { new(0, 1, 0, 0), new(1, 1, 0, 0), new(2, 1, 0, 0), new(3, 1, 0, 0) });
         svc.Setup(s => s.ListTopicsAsync(It.IsAny<IKafkaSession>())).ReturnsAsync(new[] { new TopicInfo("orders", 4, 1) });
         svc.Setup(s => s.GetTopicDetailAsync(It.IsAny<IKafkaSession>(), "orders")).ReturnsAsync(detail);
-        svc.Setup(s => s.RecreateTopicWithFewerPartitionsAsync(It.IsAny<IKafkaSession>(), "orders", 2, 1))
+        svc.Setup(s => s.DeleteAndRecreateTopicAsync(It.IsAny<IKafkaSession>(), "orders", 2, 1))
            .Returns(Task.CompletedTask);
 
         var vm = new TopicsViewModel(FakeScreen(), FakeSession(), svc.Object, NoOpNavigate);
@@ -162,7 +162,7 @@ public class TopicsViewModelTests
 
         await vm.RecreateTopicAsync();
 
-        svc.Verify(s => s.RecreateTopicWithFewerPartitionsAsync(It.IsAny<IKafkaSession>(), "orders", 2, 1), Times.Once);
+        svc.Verify(s => s.DeleteAndRecreateTopicAsync(It.IsAny<IKafkaSession>(), "orders", 2, 1), Times.Once);
     }
 
     [Fact]
@@ -182,7 +182,7 @@ public class TopicsViewModelTests
 
         await vm.RecreateTopicAsync();
 
-        svc.Verify(s => s.RecreateTopicWithFewerPartitionsAsync(
+        svc.Verify(s => s.DeleteAndRecreateTopicAsync(
             It.IsAny<IKafkaSession>(), It.IsAny<string>(), It.IsAny<int>(), It.IsAny<short>()), Times.Never);
     }
 
@@ -198,7 +198,7 @@ public class TopicsViewModelTests
         svc.Setup(s => s.GetTopicDetailAsync(It.IsAny<IKafkaSession>(), "orders"))
            .ReturnsAsync(new TopicDetail(new TopicInfo("orders", 4, 3),
                new List<PartitionInfo> { new(0, 1, 0, 0), new(1, 1, 0, 0), new(2, 1, 0, 0), new(3, 1, 0, 0) }));
-        svc.Setup(s => s.RecreateTopicWithFewerPartitionsAsync(It.IsAny<IKafkaSession>(), "orders", 2, (short)3))
+        svc.Setup(s => s.DeleteAndRecreateTopicAsync(It.IsAny<IKafkaSession>(), "orders", 2, (short)3))
            .ThrowsAsync(failure);
         return svc;
     }
@@ -284,7 +284,7 @@ public class TopicsViewModelTests
                new List<PartitionInfo> { new(0, 1, 0, 0), new(1, 1, 0, 0), new(2, 1, 0, 0), new(3, 1, 0, 0) }));
 
         var gate = new TaskCompletionSource();
-        svc.Setup(s => s.RecreateTopicWithFewerPartitionsAsync(It.IsAny<IKafkaSession>(), "orders", 2, (short)1))
+        svc.Setup(s => s.DeleteAndRecreateTopicAsync(It.IsAny<IKafkaSession>(), "orders", 2, (short)1))
            .Returns(gate.Task);
 
         var vm = new TopicsViewModel(FakeScreen(), FakeSession(), svc.Object, NoOpNavigate);
@@ -323,7 +323,7 @@ public class TopicsViewModelTests
         var svc = new Mock<ITopicService>();
         svc.Setup(s => s.ListTopicsAsync(It.IsAny<IKafkaSession>())).ReturnsAsync(() => clusterTopics);
         svc.Setup(s => s.GetTopicDetailAsync(It.IsAny<IKafkaSession>(), "orders")).ReturnsAsync(() => clusterDetail);
-        svc.Setup(s => s.RecreateTopicWithFewerPartitionsAsync(It.IsAny<IKafkaSession>(), "orders", 2, (short)1))
+        svc.Setup(s => s.DeleteAndRecreateTopicAsync(It.IsAny<IKafkaSession>(), "orders", 2, (short)1))
            .Callback(() =>
            {
                clusterTopics = new[] { new TopicInfo("orders", 2, 1) };
@@ -363,7 +363,7 @@ public class TopicsViewModelTests
         svc.Setup(s => s.GetTopicDetailAsync(It.IsAny<IKafkaSession>(), "orders"))
            .ReturnsAsync(new TopicDetail(new TopicInfo("orders", 4, 3),
                new List<PartitionInfo> { new(0, 1, 0, 0), new(1, 1, 0, 0), new(2, 1, 0, 0), new(3, 1, 0, 0) }));
-        svc.Setup(s => s.RecreateTopicWithFewerPartitionsAsync(It.IsAny<IKafkaSession>(), "orders", 2, (short)3))
+        svc.Setup(s => s.DeleteAndRecreateTopicAsync(It.IsAny<IKafkaSession>(), "orders", 2, (short)3))
            .Callback(() => clusterTopics = Array.Empty<TopicInfo>())
            .ThrowsAsync(new TopicRecreateFailedException(
                TopicRecreateStage.Creating, topicMayBeDeleted: true, FailedAttempt(),
@@ -389,7 +389,7 @@ public class TopicsViewModelTests
         svc.Setup(s => s.GetTopicDetailAsync(It.IsAny<IKafkaSession>(), "orders"))
            .ReturnsAsync(new TopicDetail(new TopicInfo("orders", 4, 3),
                new List<PartitionInfo> { new(0, 1, 0, 0), new(1, 1, 0, 0), new(2, 1, 0, 0), new(3, 1, 0, 0) }));
-        svc.Setup(s => s.RecreateTopicWithFewerPartitionsAsync(It.IsAny<IKafkaSession>(), "orders", 2, (short)3))
+        svc.Setup(s => s.DeleteAndRecreateTopicAsync(It.IsAny<IKafkaSession>(), "orders", 2, (short)3))
            .ThrowsAsync(new TopicRecreateFailedException(
                TopicRecreateStage.WaitingForDeletion, topicMayBeDeleted: true, FailedAttempt(),
                "Deletion was accepted but could not be confirmed in time.",
@@ -511,7 +511,7 @@ public class TopicsViewModelTests
 
         await vm.RecreateTopicAsync();
 
-        svc.Verify(s => s.RecreateTopicWithFewerPartitionsAsync(
+        svc.Verify(s => s.DeleteAndRecreateTopicAsync(
             It.IsAny<IKafkaSession>(), It.IsAny<string>(), It.IsAny<int>(), It.IsAny<short>()), Times.Never);
         Assert.Contains("Enter", vm.ErrorMessage);
     }
@@ -538,7 +538,7 @@ public class TopicsViewModelTests
         // answered "must be between 1 and 0", a nonsense range at the worst possible moment.
         Assert.DoesNotContain("between 1 and 0", vm.ErrorMessage);
         Assert.Contains("nothing to reduce", vm.ErrorMessage);
-        svc.Verify(s => s.RecreateTopicWithFewerPartitionsAsync(
+        svc.Verify(s => s.DeleteAndRecreateTopicAsync(
             It.IsAny<IKafkaSession>(), It.IsAny<string>(), It.IsAny<int>(), It.IsAny<short>()), Times.Never);
     }
 
@@ -556,7 +556,7 @@ public class TopicsViewModelTests
         await vm.LoadTopicsAsync();
         vm.SelectedTopic = vm.Topics[0];
         vm.ShowExpandFormCommand.Execute(null);
-        vm.NewPartitionCount = null;
+        vm.ExpandToPartitionCount = null;
 
         await vm.ExpandPartitionsAsync();
 
@@ -581,7 +581,7 @@ public class TopicsViewModelTests
 
         await vm.RecreateTopicAsync();
 
-        svc.Verify(s => s.RecreateTopicWithFewerPartitionsAsync(
+        svc.Verify(s => s.DeleteAndRecreateTopicAsync(
             It.IsAny<IKafkaSession>(), It.IsAny<string>(), It.IsAny<int>(), It.IsAny<short>()), Times.Never);
         Assert.NotNull(vm.ErrorMessage);
     }
