@@ -50,13 +50,18 @@ internal static class TopicRecreateOperation
     public static async Task ExecuteAsync(
         IAdminClient admin,
         Func<Task<IReadOnlyDictionary<string, string>>> readConfigOverrides,
-        string topicName, int newPartitionCount, short replicationFactor)
+        string topicName, int newPartitionCount)
     {
         // Validate BEFORE anything destructive: once DeleteTopicsAsync is issued the deletion is
         // asynchronous and irrevocable, so an invalid argument discovered afterwards costs the
         // user their data. An operation that cannot be undone must check its own arguments
         // rather than trusting whoever happens to call it.
-        var currentCount = await GetPartitionCountAsync(admin, topicName).ConfigureAwait(false);
+        //
+        // The replication factor is derived here from the live topic, not taken from the caller: a
+        // caller's value is a snapshot that can be stale by the time the recreate runs (a completed
+        // reassignment), and rebuilding the topic from a stale factor changes durability silently on
+        // a destructive path.
+        var (currentCount, replicationFactor) = await GetTopicFactsAsync(admin, topicName).ConfigureAwait(false);
 
         // Handled before the range check: with currentCount == 1 the valid range is empty, and the
         // range message would read "must be between 1 and 0". This is a fact about the topic, not
@@ -262,7 +267,8 @@ internal static class TopicRecreateOperation
                && topic.Partitions.Count == attempt.RequestedPartitionCount;
     }
 
-    private static async Task<int> GetPartitionCountAsync(IAdminClient admin, string topicName)
+    private static async Task<(int PartitionCount, short ReplicationFactor)> GetTopicFactsAsync(
+        IAdminClient admin, string topicName)
     {
         // Full-cluster metadata, NOT GetMetadata(topicName, ...): asking a broker about one named
         // topic auto-creates it when auto.create.topics.enable is on (the default). That would turn
@@ -293,7 +299,9 @@ internal static class TopicRecreateOperation
                 $"Topic '{topicName}' reported no partitions; refusing to recreate it.");
         }
 
-        return topic.Partitions.Count;
+        // .Replicas is int[] (same access ListTopicsAsync/GetTopicDetailAsync already use: .Length).
+        return (topic.Partitions.Count, TopicMetadataFacts.ReplicationFactorOf(
+            topic.Partitions.Select(p => p.Replicas.Length)));
     }
 
     private static Task WaitForTopicDeletionAsync(IAdminClient admin, string topicName) =>

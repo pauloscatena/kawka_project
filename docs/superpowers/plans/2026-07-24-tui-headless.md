@@ -2324,6 +2324,8 @@ git commit -m "feat(tui): add consume and produce commands"
 # FASE 4 — Operações destrutivas
 
 > **PRÉ-REQUISITO:** Tasks 1-4 **e Task 9** de `2026-07-24-topic-recreate-hardening.md` concluídas — equivalente às Fases 1-3 daquele plano. As Tasks 1-4 entregam a validação no serviço e a `TopicRecreateFailedException`; a Task 9 entrega o rename para `DeleteAndRecreateTopicAsync`, que o código abaixo chama literalmente. Sem a Task 9 este código não compila. Não comece antes.
+>
+> **Assinatura de `DeleteAndRecreateTopicAsync`:** 3 parâmetros — `(IKafkaSession session, string topicName, int newPartitionCount)`. O `replicationFactor` **não** é passado pelo chamador: a saga o deriva do tópico vivo (o follow-up de hardening fechou o bug de RF stale). O `RecreateCommand` abaixo, portanto, não lê nem repassa o RF, e a mensagem de sucesso não o menciona.
 
 ### Task 11: Confirmadores
 
@@ -2581,7 +2583,7 @@ public class TopicAdminCommandsTests
         svc.Setup(s => s.GetTopicDetailAsync(It.IsAny<IKafkaSession>(), "orders"))
            .ReturnsAsync(new TopicDetail(new TopicInfo("orders", 4, 3),
                new List<PartitionInfo> { new(0, 1, 0, 0) }));
-        svc.Setup(s => s.DeleteAndRecreateTopicAsync(It.IsAny<IKafkaSession>(), "orders", 2, (short)3))
+        svc.Setup(s => s.DeleteAndRecreateTopicAsync(It.IsAny<IKafkaSession>(), "orders", 2))
            .ThrowsAsync(new TopicRecreateFailedException(
                TopicRecreateStage.Creating,
                new Dictionary<string, string> { ["retention.ms"] = "604800000" },
@@ -2737,13 +2739,13 @@ public sealed class RecreateCommand(ITopicService topics) : ITuiCommand
         if (!await ctx.Confirmer.ConfirmAsync(action, ct))
             return new CommandResult.Failure($"Aborted: '{topicName}' was not modified.", ExitCodes.ConfirmationRefused);
 
-        var detail = await topics.GetTopicDetailAsync(session, topicName);
-        var replicationFactor = detail.Topic.ReplicationFactor;
-
         try
         {
-            await topics.DeleteAndRecreateTopicAsync(session, topicName, target.Value, replicationFactor);
-            return new CommandResult.Text($"'{topicName}' recreated with {target} partitions, RF {replicationFactor}.");
+            // No replication factor is passed: the service derives it from the live topic, so a
+            // reassignment completing between here and the recreate cannot silently rebuild the
+            // topic with a stale factor.
+            await topics.DeleteAndRecreateTopicAsync(session, topicName, target.Value);
+            return new CommandResult.Text($"'{topicName}' recreated with {target} partitions.");
         }
         catch (TopicRecreateFailedException ex) when (ex.TopicMayBeDeleted)
         {

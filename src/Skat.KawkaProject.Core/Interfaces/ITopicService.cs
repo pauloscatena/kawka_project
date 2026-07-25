@@ -27,6 +27,10 @@ public interface ITopicService
     /// skip or replay records), and ACLs.
     /// </para>
     /// <para>
+    /// The replication factor is derived from the live topic; a non-uniform assignment is flattened
+    /// to its minimum.
+    /// </para>
+    /// <para>
     /// Callers MUST obtain explicit user confirmation before calling this. Throws
     /// <see cref="System.ArgumentOutOfRangeException"/> if <paramref name="newPartitionCount"/> is
     /// not in [1, current-1], <see cref="System.InvalidOperationException"/> if the topic has a
@@ -37,5 +41,5 @@ public interface ITopicService
     /// failure during the sequence.
     /// </para>
     /// </summary>
-    Task DeleteAndRecreateTopicAsync(IKafkaSession session, string topicName, int newPartitionCount, short replicationFactor);
+    Task DeleteAndRecreateTopicAsync(IKafkaSession session, string topicName, int newPartitionCount);
 }

@@ -54,28 +54,34 @@ public class TopicServiceIntegrationTests : IAsyncLifetime
     [Fact]
     public async Task DeleteAndRecreateTopicAsync_reports_the_stage_and_preserves_config_when_the_create_fails()
     {
-        using var session = Session();
-        var svc = new TopicService();
-
         var adminCfg = new AdminClientConfig { BootstrapServers = _kafka.GetBootstrapAddress() };
-        using (var admin = new AdminClientBuilder(adminCfg).Build())
+        using var admin = new AdminClientBuilder(adminCfg).Build();
+        await admin.CreateTopicsAsync(new[]
         {
-            await admin.CreateTopicsAsync(new[]
+            new TopicSpecification
             {
-                new TopicSpecification
-                {
-                    Name = "fail-topic",
-                    NumPartitions = 4,
-                    ReplicationFactor = 1,
-                    Configs = new Dictionary<string, string> { ["retention.ms"] = "604800000" }
-                }
-            });
-        }
+                Name = "fail-topic",
+                NumPartitions = 4,
+                ReplicationFactor = 1,
+                Configs = new Dictionary<string, string> { ["retention.ms"] = "604800000" }
+            }
+        });
 
-        // Replication factor 99 on a single-broker container makes CreateTopics fail AFTER the
-        // delete has already happened - the exact failure mode the user must survive.
+        // The replication factor is now derived from the live topic (RF 1 here, valid), so it can no
+        // longer be used to force a post-delete create failure. An invalid preserved config value is
+        // the remaining lever: CreateTopics rejects it AFTER the delete has already happened - the
+        // exact failure mode the user must survive. Driven through ExecuteAsync so the bad config can
+        // be injected without a real topic having to carry it (a topic cannot: both CreateTopics and
+        // AlterConfigs validate configs, so no real topic can exist with an invalid one).
+        IReadOnlyDictionary<string, string> badConfig = new Dictionary<string, string>
+        {
+            ["retention.ms"] = "604800000",
+            ["min.insync.replicas"] = "not-a-number"
+        };
+
         var ex = await Assert.ThrowsAsync<TopicRecreateFailedException>(
-            () => svc.DeleteAndRecreateTopicAsync(session, "fail-topic", 2, 99));
+            () => TopicRecreateOperation.ExecuteAsync(
+                admin, () => Task.FromResult(badConfig), "fail-topic", 2));
 
         Assert.Equal(TopicRecreateStage.Creating, ex.Stage);
         Assert.True(ex.TopicMayBeDeleted);
@@ -95,7 +101,7 @@ public class TopicServiceIntegrationTests : IAsyncLifetime
         // ThrowsAsync matches the type exactly, so this also asserts it is NOT the typed
         // TopicRecreateFailedException - a pre-delete failure must never carry a data-loss verdict.
         await Assert.ThrowsAsync<InvalidOperationException>(
-            () => svc.DeleteAndRecreateTopicAsync(session, "absent-topic", 1, 1));
+            () => svc.DeleteAndRecreateTopicAsync(session, "absent-topic", 1));
     }
 
     [Fact]
@@ -221,7 +227,7 @@ public class TopicServiceIntegrationTests : IAsyncLifetime
         }
 
         var svc = new TopicService();
-        await svc.DeleteAndRecreateTopicAsync(session, "shrink-topic", 2, 1);
+        await svc.DeleteAndRecreateTopicAsync(session, "shrink-topic", 2);
 
         var detail = await svc.GetTopicDetailAsync(session, "shrink-topic");
         Assert.Equal(2, detail.Partitions.Count);
@@ -244,7 +250,7 @@ public class TopicServiceIntegrationTests : IAsyncLifetime
         await svc.CreateTopicAsync(session, topic, 4, 1);
 
         await Assert.ThrowsAsync<ArgumentOutOfRangeException>(
-            () => svc.DeleteAndRecreateTopicAsync(session, topic, requested, 1));
+            () => svc.DeleteAndRecreateTopicAsync(session, topic, requested));
 
         // The guard must run BEFORE the delete: the topic has to be untouched.
         var detail = await svc.GetTopicDetailAsync(session, topic);
@@ -258,7 +264,7 @@ public class TopicServiceIntegrationTests : IAsyncLifetime
         var svc = new TopicService();
 
         await Assert.ThrowsAsync<InvalidOperationException>(
-            () => svc.DeleteAndRecreateTopicAsync(session, "no-such-topic-here", 1, 1));
+            () => svc.DeleteAndRecreateTopicAsync(session, "no-such-topic-here", 1));
     }
 
     [Fact]
@@ -268,7 +274,7 @@ public class TopicServiceIntegrationTests : IAsyncLifetime
         var svc = new TopicService();
 
         await Assert.ThrowsAsync<InvalidOperationException>(
-            () => svc.DeleteAndRecreateTopicAsync(session, "never-existed", 1, 1));
+            () => svc.DeleteAndRecreateTopicAsync(session, "never-existed", 1));
 
         // Asking a broker for metadata about a single named topic auto-creates it when
         // auto.create.topics.enable is on. Rejecting a typo'd name must not create it.
@@ -287,12 +293,27 @@ public class TopicServiceIntegrationTests : IAsyncLifetime
         var topic = $"bound-topic-{initialCount}-{requested}";
         await svc.CreateTopicAsync(session, topic, initialCount, 1);
 
-        await svc.DeleteAndRecreateTopicAsync(session, topic, requested, 1);
+        await svc.DeleteAndRecreateTopicAsync(session, topic, requested);
 
         // Without this, tightening the guard to `newPartitionCount <= 1` would keep every other
         // test green while breaking the most common real request: shrink down to one partition.
         var detail = await svc.GetTopicDetailAsync(session, topic);
         Assert.Equal(requested, detail.Partitions.Count);
+    }
+
+    [Fact]
+    public async Task DeleteAndRecreateTopicAsync_derives_replication_factor_from_the_live_topic()
+    {
+        using var session = Session();
+        var svc = new TopicService();
+        await svc.CreateTopicAsync(session, "rf-live", 4, 1);
+
+        // Assinatura nova: sem replicationFactor. A saga tem de derivar RF=1 do tópico vivo.
+        await svc.DeleteAndRecreateTopicAsync(session, "rf-live", 2);
+
+        var detail = await svc.GetTopicDetailAsync(session, "rf-live");
+        Assert.Equal(2, detail.Partitions.Count);
+        Assert.Equal((short)1, detail.Topic.ReplicationFactor);
     }
 
     [Fact]
@@ -303,7 +324,7 @@ public class TopicServiceIntegrationTests : IAsyncLifetime
         await svc.CreateTopicAsync(session, "solo-topic", 1, 1);
 
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(
-            () => svc.DeleteAndRecreateTopicAsync(session, "solo-topic", 1, 1));
+            () => svc.DeleteAndRecreateTopicAsync(session, "solo-topic", 1));
 
         Assert.Contains("nothing to reduce", ex.Message);
         Assert.DoesNotContain("between 1 and 0", ex.Message);

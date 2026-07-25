@@ -197,12 +197,11 @@ public class TopicsViewModel : ReactiveObject, IRoutableViewModel
         }
 
         var topicName = SelectedTopicDetail.Topic.Name;
-        var replicationFactor = SelectedTopicDetail.Topic.ReplicationFactor;
         IsBusy = true;
         ErrorMessage = null;
         try
         {
-            await _topicService.DeleteAndRecreateTopicAsync(_session, topicName, requestedCount, replicationFactor);
+            await _topicService.DeleteAndRecreateTopicAsync(_session, topicName, requestedCount);
             ActiveForm = TopicsFormMode.None;
             // ReloadTopicsAsync, not LoadTopicsAsync: IsBusy must stay true until the finally below,
             // through the detail load and reselect that follow.

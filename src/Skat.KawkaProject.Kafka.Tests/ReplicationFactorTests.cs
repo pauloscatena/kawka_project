@@ -13,7 +13,7 @@ public class ReplicationFactorTests
     [Fact]
     public void Uniform_assignment_reports_that_factor()
     {
-        Assert.Equal((short)3, TopicService.ReplicationFactorOf(new[] { 3, 3, 3, 3 }));
+        Assert.Equal((short)3, TopicMetadataFacts.ReplicationFactorOf(new[] { 3, 3, 3, 3 }));
     }
 
     [Fact]
@@ -23,13 +23,13 @@ public class ReplicationFactorTests
         // dropped to 2. Deriving from partition 0 would report 3, and a recreate would then ask for
         // RF 3 uniformly - silently RAISING durability expectations the topic never had. Reporting
         // the minimum tells the truth about the weakest partition.
-        Assert.Equal((short)2, TopicService.ReplicationFactorOf(new[] { 3, 2, 2, 2 }));
+        Assert.Equal((short)2, TopicMetadataFacts.ReplicationFactorOf(new[] { 3, 2, 2, 2 }));
     }
 
     [Fact]
     public void Minimum_is_found_regardless_of_position()
     {
-        Assert.Equal((short)1, TopicService.ReplicationFactorOf(new[] { 3, 3, 1, 3 }));
+        Assert.Equal((short)1, TopicMetadataFacts.ReplicationFactorOf(new[] { 3, 3, 1, 3 }));
     }
 
     [Fact]
@@ -37,6 +37,6 @@ public class ReplicationFactorTests
     {
         // A topic mid-deletion can transiently report no partitions. The old code indexed
         // Partitions[0] here and threw IndexOutOfRange (flagged by the Task 3 review).
-        Assert.Equal((short)0, TopicService.ReplicationFactorOf(System.Array.Empty<int>()));
+        Assert.Equal((short)0, TopicMetadataFacts.ReplicationFactorOf(System.Array.Empty<int>()));
     }
 }

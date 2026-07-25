@@ -10,20 +10,6 @@ public class TopicService : ITopicService
     private static readonly TimeSpan MetadataQueryTimeout  = TimeSpan.FromSeconds(10);
     private static readonly TimeSpan WatermarkQueryTimeout = TimeSpan.FromSeconds(5);
 
-    /// <summary>
-    /// Derives a topic's replication factor from its per-partition replica counts. Internal so the
-    /// non-uniform case can be unit-tested; a single-broker container cannot produce one.
-    /// </summary>
-    internal static short ReplicationFactorOf(IEnumerable<int> replicaCountsPerPartition)
-    {
-        // Minimum, not the first partition's count. A non-uniform assignment (an interrupted
-        // reassignment) would otherwise report partition 0's factor, and a recreate built from it
-        // would ask for that factor uniformly - misrepresenting the topic's real durability. The
-        // minimum tells the truth about the weakest partition. DefaultIfEmpty avoids the
-        // IndexOutOfRange the old Partitions[0] indexing threw for a topic reporting no partitions.
-        return (short)replicaCountsPerPartition.DefaultIfEmpty(0).Min();
-    }
-
     private static AdminClientConfig AdminConfig(IKafkaSession session)
     {
         var cfg = new AdminClientConfig();
@@ -40,7 +26,7 @@ public class TopicService : ITopicService
             .Select(t => new TopicInfo(
                 t.Topic,
                 t.Partitions.Count,
-                ReplicationFactorOf(t.Partitions.Select(p => p.Replicas.Length))));
+                TopicMetadataFacts.ReplicationFactorOf(t.Partitions.Select(p => p.Replicas.Length))));
     }
 
     public async Task<TopicDetail> GetTopicDetailAsync(IKafkaSession session, string topicName)
@@ -71,7 +57,7 @@ public class TopicService : ITopicService
         }).ToList()).ConfigureAwait(false);
 
         var info = new TopicInfo(topicMeta.Topic, partitions.Count,
-            ReplicationFactorOf(topicMeta.Partitions.Select(p => p.Replicas.Length)));
+            TopicMetadataFacts.ReplicationFactorOf(topicMeta.Partitions.Select(p => p.Replicas.Length)));
         return new TopicDetail(info, partitions);
     }
 
@@ -126,12 +112,12 @@ public class TopicService : ITopicService
     // method) and the saga is a different animal. This method just builds the client and hands the
     // config read (an adapter concern) to it as a delegate.
     public async Task DeleteAndRecreateTopicAsync(
-        IKafkaSession session, string topicName, int newPartitionCount, short replicationFactor)
+        IKafkaSession session, string topicName, int newPartitionCount)
     {
         using var admin = new AdminClientBuilder(AdminConfig(session)).Build();
         await TopicRecreateOperation.ExecuteAsync(
             admin,
             () => GetTopicConfigOverridesAsync(session, topicName),
-            topicName, newPartitionCount, replicationFactor).ConfigureAwait(false);
+            topicName, newPartitionCount).ConfigureAwait(false);
     }
 }
