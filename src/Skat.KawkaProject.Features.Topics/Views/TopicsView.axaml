@@ -16,10 +16,10 @@
                 <Border Width="1" Height="16" Background="{DynamicResource BorderBrush}" />
                 <TextBox Text="{Binding Filter}" Watermark="Filter topics…"
                          Width="180" FontSize="11" Height="26" VerticalContentAlignment="Center" />
-                <Button Command="{Binding LoadCommand}" FontSize="11" Padding="8,4"
+                <Button Command="{Binding LoadCommand}" IsEnabled="{Binding IsNotBusy}" FontSize="11" Padding="8,4"
                         Background="{DynamicResource SurfaceBrush}"
                         BorderBrush="{DynamicResource BorderBrush}">↺ Refresh</Button>
-                <Button Command="{Binding ShowCreateFormCommand}" FontSize="11" Padding="8,4"
+                <Button Command="{Binding ShowCreateFormCommand}" IsEnabled="{Binding IsNotBusy}" FontSize="11" Padding="8,4"
                         Background="{DynamicResource AccentSubtleBrush}"
                         BorderBrush="{DynamicResource AccentBrush}"
                         Foreground="{DynamicResource AccentBrush}"
@@ -46,7 +46,7 @@
                            VerticalAlignment="Center">Replication:</TextBlock>
                 <NumericUpDown Value="{Binding NewTopicReplicationFactor}" Minimum="1"
                                Width="90" FontSize="11" />
-                <Button Command="{Binding CreateTopicCommand}" FontSize="11" Padding="8,4"
+                <Button Command="{Binding CreateTopicCommand}" IsEnabled="{Binding IsNotBusy}" FontSize="11" Padding="8,4"
                         Background="{DynamicResource AccentSubtleBrush}"
                         BorderBrush="{DynamicResource AccentBrush}"
                         Foreground="{DynamicResource AccentBrush}">Create</Button>
@@ -62,9 +62,13 @@
                 BorderBrush="{DynamicResource StatusErrorBrush}" BorderThickness="0,0,0,1"
                 IsVisible="{Binding ErrorMessage, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
             <Grid ColumnDefinitions="*,Auto">
-                <TextBlock Grid.Column="0" Text="{Binding ErrorMessage}"
-                           Foreground="{DynamicResource StatusErrorBrush}"
-                           FontSize="11" TextWrapping="Wrap" />
+                <!-- Selectable, not a plain TextBlock: after a failed recreate this banner holds
+                     the partition count, replication factor and config overrides of a topic that
+                     no longer exists anywhere else. Someone rebuilding it with kafka-topics needs
+                     to copy those, not retype them from the screen at 2am. -->
+                <SelectableTextBlock Grid.Column="0" Text="{Binding ErrorMessage}"
+                                     Foreground="{DynamicResource StatusErrorBrush}"
+                                     FontSize="11" TextWrapping="Wrap" />
                 <Button Grid.Column="1" Command="{Binding DismissErrorCommand}"
                         Padding="4,0" Background="Transparent" BorderThickness="0"
                         Foreground="{DynamicResource TextMutedBrush}">✕</Button>
@@ -102,8 +106,11 @@
 
         <!-- Content: topic list + detail panel -->
         <Grid ColumnDefinitions="*,260">
+            <!-- IsEnabled gates selection too: navigating to another topic mid-operation has the
+                 selection silently reverted when the operation finishes (QA Task 6, OBS-2). -->
             <ListBox Grid.Column="0" ItemsSource="{Binding Topics}"
                      SelectedItem="{Binding SelectedTopic}"
+                     IsEnabled="{Binding IsNotBusy}"
                      Background="{DynamicResource BackgroundBrush}"
                      BorderThickness="0" Padding="0">
                 <ListBox.ItemTemplate>
@@ -162,11 +169,12 @@
                             <StackPanel Orientation="Horizontal" Spacing="6">
                                 <TextBlock FontSize="11" Foreground="{DynamicResource TextMutedBrush}"
                                            VerticalAlignment="Center">New count:</TextBlock>
-                                <NumericUpDown Value="{Binding NewPartitionCount}" Minimum="1"
+                                <NumericUpDown Value="{Binding ExpandToPartitionCount}" Minimum="1"
                                                Width="110" FontSize="11" />
                             </StackPanel>
                             <StackPanel Orientation="Horizontal" Spacing="6">
-                                <Button Command="{Binding ExpandPartitionsCommand}" FontSize="11" Padding="8,4"
+                                <Button Command="{Binding ExpandPartitionsCommand}" IsEnabled="{Binding IsNotBusy}"
+                                        FontSize="11" Padding="8,4"
                                         Background="{DynamicResource AccentSubtleBrush}"
                                         BorderBrush="{DynamicResource AccentBrush}"
                                         Foreground="{DynamicResource AccentBrush}">Apply</Button>
@@ -183,20 +191,28 @@
                             BorderThickness="0,1,0,0">
                         <StackPanel Orientation="Horizontal" Spacing="6">
                             <Button Command="{Binding ShowExpandFormCommand}"
+                                    IsEnabled="{Binding IsNotBusy}"
+                                    IsVisible="{Binding IsNotExpandingPartitions}"
                                     Padding="8,4" FontSize="11"
                                     Background="{DynamicResource SurfaceBrush}"
                                     BorderBrush="{DynamicResource BorderBrush}">
                                 ▲ Increase
                             </Button>
                             <Button Command="{Binding ShowRecreateFormCommand}"
+                                    IsEnabled="{Binding IsNotBusy}"
+                                    IsVisible="{Binding IsNotRecreatingTopic}"
                                     Padding="8,4" FontSize="11"
                                     Background="{DynamicResource SurfaceBrush}"
                                     BorderBrush="{DynamicResource StatusErrorBrush}"
                                     Foreground="{DynamicResource StatusErrorBrush}">
                                 ⚠ Recreate
                             </Button>
+                            <!-- Bound to the detail panel's own topic, not the list selection: the
+                                 panel is only visible when SelectedTopicDetail is non-null, whereas
+                                 the list selection can be null while the panel is open. -->
                             <Button Command="{Binding DeleteTopicCommand}"
-                                    CommandParameter="{Binding SelectedTopic.Name}"
+                                    CommandParameter="{Binding SelectedTopicDetail.Topic.Name}"
+                                    IsEnabled="{Binding IsNotBusy}"
                                     Padding="8,4" FontSize="11"
                                     Background="{DynamicResource DestructiveBrush}"
                                     BorderBrush="{DynamicResource StatusErrorBrush}"
@@ -215,7 +231,18 @@
                         <StackPanel Spacing="6">
                             <TextBlock Text="⚠ Recreate with fewer partitions" FontSize="11" FontWeight="Bold"
                                        Foreground="{DynamicResource StatusErrorBrush}" />
-                            <TextBlock Text="This deletes and recreates the topic. All messages in this topic will be permanently lost. This cannot be undone."
+                            <!-- All three lines come from DestructiveAction via the ViewModel. Do not
+                                 replace any of them with literal text: RecreateAdditionalLosses
+                                 deliberately omits the message loss because RecreateHeadline carries
+                                 it, so a hardcoded headline that stops mentioning messages would
+                                 leave the worst consequence off the panel entirely. -->
+                            <TextBlock Text="{Binding RecreateHeadline}"
+                                       FontSize="10" TextWrapping="Wrap"
+                                       Foreground="{DynamicResource StatusErrorBrush}" />
+                            <TextBlock Text="{Binding RecreateAdditionalLosses}"
+                                       FontSize="10" TextWrapping="Wrap"
+                                       Foreground="{DynamicResource TextPrimaryBrush}" />
+                            <TextBlock Text="{Binding RecreateWhatIsPreserved}"
                                        FontSize="10" TextWrapping="Wrap"
                                        Foreground="{DynamicResource TextMutedBrush}" />
                             <StackPanel Orientation="Horizontal" Spacing="6">
@@ -229,11 +256,21 @@
                                      FontSize="11" Height="26" VerticalContentAlignment="Center" />
                             <StackPanel Orientation="Horizontal" Spacing="6">
                                 <Button Command="{Binding RecreateTopicCommand}"
-                                        IsEnabled="{Binding CanConfirmRecreate}"
                                         FontSize="11" Padding="8,4"
                                         Background="{DynamicResource DestructiveBrush}"
                                         BorderBrush="{DynamicResource StatusErrorBrush}"
-                                        Foreground="{DynamicResource DestructiveTextBrush}">Recreate topic</Button>
+                                        Foreground="{DynamicResource DestructiveTextBrush}">
+                                    <Button.IsEnabled>
+                                        <!-- Both: the typed name must match AND no operation may be
+                                             in flight. Avalonia allows only one IsEnabled, hence the
+                                             MultiBinding. -->
+                                        <MultiBinding Converter="{x:Static BoolConverters.And}">
+                                            <Binding Path="CanConfirmRecreate" />
+                                            <Binding Path="IsNotBusy" />
+                                        </MultiBinding>
+                                    </Button.IsEnabled>
+                                    Recreate topic
+                                </Button>
                                 <Button Command="{Binding CancelRecreateCommand}" FontSize="11" Padding="8,4"
                                         Background="Transparent" BorderThickness="0"
                                         Foreground="{DynamicResource TextMutedBrush}">✕ Cancel</Button>
@@ -277,8 +314,13 @@
                                                        FontSize="11"
                                                        FontFamily="Cascadia Code,JetBrains Mono,Consolas,monospace"
                                                        Foreground="{DynamicResource StatusLiveBrush}" />
+                                            <!-- Gated like the rest: navigating to a partition's
+                                                 messages mid-recreate opens the message view of a
+                                                 topic being deleted. RelativeSource because the
+                                                 row's DataContext is a PartitionInfo, not the VM. -->
                                             <Button Grid.Column="3" Content="👁"
                                                     Command="{Binding DataContext.ViewPartitionMessagesCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                    IsEnabled="{Binding DataContext.IsNotBusy, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                                     CommandParameter="{Binding PartitionId}"
                                                     FontSize="11" Padding="4,0" MinWidth="0"
                                                     Background="Transparent" BorderThickness="0"

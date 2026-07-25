@@ -9,6 +9,13 @@
     <PackageReference Include="System.Reactive" Version="6.0.1" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- Lets the test project drive WaitForTopicDeletionAsync with scripted answers and zero
+         delays. Timing that loop through the public API does not work: a full recreate spends
+         hundreds of milliseconds building librdkafka clients, swamping the intervals under test. -->
+    <InternalsVisibleTo Include="Skat.KawkaProject.Kafka.Tests" />
+  </ItemGroup>
+
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>

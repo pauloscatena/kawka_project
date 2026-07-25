@@ -9,6 +9,41 @@ public interface ITopicService
     Task CreateTopicAsync(IKafkaSession session, string name, int partitionCount, short replicationFactor);
     Task DeleteTopicAsync(IKafkaSession session, string topicName);
     Task ExpandPartitionsAsync(IKafkaSession session, string topicName, int newPartitionCount);
-    Task<IReadOnlyDictionary<string, string>> GetTopicConfigAsync(IKafkaSession session, string topicName);
-    Task RecreateTopicWithFewerPartitionsAsync(IKafkaSession session, string topicName, int newPartitionCount, short replicationFactor);
+    /// <summary>
+    /// Returns ONLY the config entries explicitly overridden at topic level. Everything the topic
+    /// merely inherits is excluded: Kafka's built-in defaults, static broker config
+    /// (<c>server.properties</c>), and dynamic broker config (<c>kafka-configs --entity-type
+    /// brokers</c>). An empty result therefore means "this topic overrides nothing", NOT "this
+    /// topic has no configuration".
+    /// </summary>
+    Task<IReadOnlyDictionary<string, string>> GetTopicConfigOverridesAsync(IKafkaSession session, string topicName);
+
+    /// <summary>
+    /// DELETES the topic and recreates it with fewer partitions. Kafka cannot shrink partitions in
+    /// place, so this is destructive: <b>ALL MESSAGES IN THE TOPIC ARE PERMANENTLY LOST</b>.
+    /// <para>
+    /// What is lost and what survives is enumerated once, in
+    /// <see cref="Skat.KawkaProject.Core.Models.DestructiveAction"/> - read the lists there rather
+    /// than restating them here, so a frontend's warning cannot drift from this contract.
+    /// <see cref="GetTopicConfigOverridesAsync"/> is what reads the preserved side back.
+    /// One thing worth stating because its absence from the list looks like an omission: ACLs are
+    /// deliberately NOT on the loss list, because literal ACLs on the same topic name survive
+    /// delete+recreate.
+    /// </para>
+    /// <para>
+    /// The replication factor is derived from the live topic; a non-uniform assignment is flattened
+    /// to its minimum.
+    /// </para>
+    /// <para>
+    /// Callers MUST obtain explicit user confirmation before calling this. Throws
+    /// <see cref="System.ArgumentOutOfRangeException"/> if <paramref name="newPartitionCount"/> is
+    /// not in [1, current-1], <see cref="System.InvalidOperationException"/> if the topic has a
+    /// single partition or the cluster does not confirm it reliably (unknown, transient metadata
+    /// error, or no partitions reported), and
+    /// <see cref="Skat.KawkaProject.Core.Exceptions.TopicRecreateFailedException"/> (carrying the
+    /// failed stage, whether the topic may be gone, and everything needed to rebuild it) on any
+    /// failure during the sequence.
+    /// </para>
+    /// </summary>
+    Task DeleteAndRecreateTopicAsync(IKafkaSession session, string topicName, int newPartitionCount);
 }

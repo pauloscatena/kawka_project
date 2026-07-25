@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using System.Reactive.Linq;
 using System.Windows.Input;
 using ReactiveUI;
+using Skat.KawkaProject.Core.Exceptions;
 using Skat.KawkaProject.Core.Interfaces;
 using Skat.KawkaProject.Core.Models;
 using Unit = System.Reactive.Unit;
@@ -24,27 +25,48 @@ public class TopicsViewModel : ReactiveObject, IRoutableViewModel
     public string UrlPathSegment => "topics";
 
     public ObservableCollection<TopicInfo> Topics { get; } = new();
-    private bool _isCreatingTopic;
+    private TopicsFormMode _activeForm = TopicsFormMode.None;
     private string _newTopicName = "";
     private int _newTopicPartitions = 1;
     private int _newTopicReplicationFactor = 1;
-    private bool _isExpandingPartitions;
-    private int _newPartitionCount = 1;
-    private bool _isRecreatingTopic;
-    private int _recreatePartitionCount = 1;
+    private int? _expandToPartitionCount = 1;
+    private int? _recreatePartitionCount = 1;
     private string _recreateConfirmName = "";
 
-    public bool IsCreatingTopic { get => _isCreatingTopic; private set { this.RaiseAndSetIfChanged(ref _isCreatingTopic, value); this.RaisePropertyChanged(nameof(IsNotCreatingTopic)); } }
-    public bool IsNotCreatingTopic => !_isCreatingTopic;
+    /// <summary>
+    /// The single source of truth for which inline form is open. Setting it makes the forms
+    /// mutually exclusive by construction - there is no state in which two are open.
+    /// </summary>
+    public TopicsFormMode ActiveForm
+    {
+        get => _activeForm;
+        private set
+        {
+            this.RaiseAndSetIfChanged(ref _activeForm, value);
+            this.RaisePropertyChanged(nameof(IsCreatingTopic));
+            this.RaisePropertyChanged(nameof(IsNotCreatingTopic));
+            this.RaisePropertyChanged(nameof(IsExpandingPartitions));
+            this.RaisePropertyChanged(nameof(IsNotExpandingPartitions));
+            this.RaisePropertyChanged(nameof(IsRecreatingTopic));
+            this.RaisePropertyChanged(nameof(IsNotRecreatingTopic));
+        }
+    }
+
+    public bool IsCreatingTopic => _activeForm == TopicsFormMode.Create;
+    public bool IsNotCreatingTopic => _activeForm != TopicsFormMode.Create;
     public string NewTopicName { get => _newTopicName; set => this.RaiseAndSetIfChanged(ref _newTopicName, value); }
     public int NewTopicPartitions { get => _newTopicPartitions; set => this.RaiseAndSetIfChanged(ref _newTopicPartitions, value); }
     public int NewTopicReplicationFactor { get => _newTopicReplicationFactor; set => this.RaiseAndSetIfChanged(ref _newTopicReplicationFactor, value); }
-    public bool IsExpandingPartitions { get => _isExpandingPartitions; private set { this.RaiseAndSetIfChanged(ref _isExpandingPartitions, value); this.RaisePropertyChanged(nameof(IsNotExpandingPartitions)); } }
-    public bool IsNotExpandingPartitions => !_isExpandingPartitions;
-    public int NewPartitionCount { get => _newPartitionCount; set => this.RaiseAndSetIfChanged(ref _newPartitionCount, value); }
-    public bool IsRecreatingTopic { get => _isRecreatingTopic; private set { this.RaiseAndSetIfChanged(ref _isRecreatingTopic, value); this.RaisePropertyChanged(nameof(IsNotRecreatingTopic)); } }
-    public bool IsNotRecreatingTopic => !_isRecreatingTopic;
-    public int RecreatePartitionCount { get => _recreatePartitionCount; set => this.RaiseAndSetIfChanged(ref _recreatePartitionCount, value); }
+    public bool IsExpandingPartitions => _activeForm == TopicsFormMode.Expand;
+    public bool IsNotExpandingPartitions => _activeForm != TopicsFormMode.Expand;
+    // Nullable because NumericUpDown.Value is decimal?: clearing the box must mean "no value", not
+    // silently keep the previous one - which, on a destructive recreate, means running with a count
+    // the user never chose and cannot see.
+    public int? ExpandToPartitionCount { get => _expandToPartitionCount; set => this.RaiseAndSetIfChanged(ref _expandToPartitionCount, value); }
+    public bool IsRecreatingTopic => _activeForm == TopicsFormMode.Recreate;
+    public bool IsNotRecreatingTopic => _activeForm != TopicsFormMode.Recreate;
+    /// <summary>Nullable for the same reason as <see cref="ExpandToPartitionCount"/>.</summary>
+    public int? RecreatePartitionCount { get => _recreatePartitionCount; set => this.RaiseAndSetIfChanged(ref _recreatePartitionCount, value); }
     public string RecreateConfirmName
     {
         get => _recreateConfirmName;
@@ -55,6 +77,34 @@ public class TopicsViewModel : ReactiveObject, IRoutableViewModel
         }
     }
     public bool CanConfirmRecreate => SelectedTopicDetail != null && _recreateConfirmName == SelectedTopicDetail.Topic.Name;
+
+    // The three lines of the recreate warning panel in TopicsView.axaml. All three derive from
+    // DestructiveAction, so the GUI, the service contract and the planned TUI cannot drift apart on
+    // what a recreate destroys. They are constants of the operation, not of the selected topic -
+    // the wording never names it - so they need no change notification.
+    //
+    // The split between the headline and the line below it is this ViewModel's call about how to
+    // present one canonical list in this frontend, and BOTH halves come from the list. Deriving the
+    // headline here rather than writing it into the XAML is what makes the filtering below safe:
+    // otherwise the panel would depend on a literal in the View continuing to mention messages, and
+    // an editor shortening that sentence would silently leave the worst consequence off the screen.
+
+    /// <summary>The severity line, in red. Carries the message loss on its own.</summary>
+    public string RecreateHeadline =>
+        $"This deletes and recreates the topic. It permanently destroys {DestructiveAction.LostMessages}, and cannot be undone.";
+
+    /// <summary>
+    /// Everything else the recreate destroys - the message loss is excluded because
+    /// <see cref="RecreateHeadline"/> already carries it, and repeating it in body text directly
+    /// below dilutes the one sentence meant to stop the user. Excluded by identity rather than by
+    /// position, so a consequence added to the canonical list still surfaces here. Deliberately a
+    /// partial inventory: a caller that needs the whole list wants DestructiveAction.RecreateLoses.
+    /// </summary>
+    public string RecreateAdditionalLosses =>
+        $"Beyond the messages, this also destroys: {string.Join("; ", DestructiveAction.RecreateLoses.Where(l => l != DestructiveAction.LostMessages))}.";
+
+    /// <summary>What survives, so the user does not go re-apply settings the saga carried over.</summary>
+    public string RecreateWhatIsPreserved => $"Preserved: {string.Join("; ", DestructiveAction.RecreatePreserves)}.";
 
     public Interaction<string, bool> ConfirmDelete { get; } = new();
 
@@ -72,7 +122,19 @@ public class TopicsViewModel : ReactiveObject, IRoutableViewModel
     public ICommand CancelRecreateCommand { get; }
     public ICommand RecreateTopicCommand { get; }
 
-    public bool IsBusy { get => _isBusy; private set => this.RaiseAndSetIfChanged(ref _isBusy, value); }
+    public bool IsBusy
+    {
+        get => _isBusy;
+        private set { this.RaiseAndSetIfChanged(ref _isBusy, value); this.RaisePropertyChanged(nameof(IsNotBusy)); }
+    }
+
+    /// <summary>
+    /// Bound to IsEnabled on every mutating control and on the topic list. A recreate can wait up
+    /// to 30s for deletion to propagate, and nothing else must be clickable meanwhile: a second
+    /// destructive command issued mid-operation can delete the topic the recreate just put back,
+    /// and selecting another topic has its selection silently reverted when the operation finishes.
+    /// </summary>
+    public bool IsNotBusy => !_isBusy;
     public string? ErrorMessage { get => _errorMessage; private set => this.RaiseAndSetIfChanged(ref _errorMessage, value); }
 
     public string Filter
@@ -114,25 +176,25 @@ public class TopicsViewModel : ReactiveObject, IRoutableViewModel
 
         LoadCommand = ReactiveCommand.CreateFromTask(LoadTopicsAsync);
         DeleteTopicCommand = ReactiveCommand.CreateFromTask<string>(DeleteTopicAsync);
-        ShowCreateFormCommand = ReactiveCommand.Create(() => { IsCreatingTopic = true; NewTopicName = ""; NewTopicPartitions = 1; NewTopicReplicationFactor = 1; });
-        CancelCreateCommand = ReactiveCommand.Create(() => IsCreatingTopic = false);
+        ShowCreateFormCommand = ReactiveCommand.Create(() => { ActiveForm = TopicsFormMode.Create; NewTopicName = ""; NewTopicPartitions = 1; NewTopicReplicationFactor = 1; });
+        CancelCreateCommand = ReactiveCommand.Create(() => ActiveForm = TopicsFormMode.None);
         CreateTopicCommand = ReactiveCommand.CreateFromTask(CreateTopicAsync);
         DismissErrorCommand = ReactiveCommand.Create(() => ErrorMessage = null);
         ViewPartitionMessagesCommand = ReactiveCommand.Create<int>(ViewPartitionMessages);
         ShowExpandFormCommand = ReactiveCommand.Create(() =>
         {
-            IsExpandingPartitions = true;
-            NewPartitionCount = (SelectedTopicDetail?.Partitions.Count ?? 0) + 1;
+            ActiveForm = TopicsFormMode.Expand;
+            ExpandToPartitionCount = (SelectedTopicDetail?.Partitions.Count ?? 0) + 1;
         });
-        CancelExpandCommand = ReactiveCommand.Create(() => IsExpandingPartitions = false);
+        CancelExpandCommand = ReactiveCommand.Create(() => ActiveForm = TopicsFormMode.None);
         ExpandPartitionsCommand = ReactiveCommand.CreateFromTask(ExpandPartitionsAsync);
         ShowRecreateFormCommand = ReactiveCommand.Create(() =>
         {
-            IsRecreatingTopic = true;
+            ActiveForm = TopicsFormMode.Recreate;
             RecreateConfirmName = "";
             RecreatePartitionCount = Math.Max(1, (SelectedTopicDetail?.Partitions.Count ?? 1) - 1);
         });
-        CancelRecreateCommand = ReactiveCommand.Create(() => IsRecreatingTopic = false);
+        CancelRecreateCommand = ReactiveCommand.Create(() => ActiveForm = TopicsFormMode.None);
         RecreateTopicCommand = ReactiveCommand.CreateFromTask(RecreateTopicAsync);
 
         _ = LoadTopicsAsync();
@@ -142,47 +204,187 @@ public class TopicsViewModel : ReactiveObject, IRoutableViewModel
     {
         if (SelectedTopicDetail == null || !CanConfirmRecreate) return;
         var currentCount = SelectedTopicDetail.Partitions.Count;
-        if (_recreatePartitionCount < 1 || _recreatePartitionCount >= currentCount)
+
+        // Before the range check: with one partition the valid range is empty and the range message
+        // would read "between 1 and 0". This is a fact about the topic, not the input.
+        if (currentCount <= 1)
         {
-            ErrorMessage = $"New partition count must be between 1 and {currentCount - 1}.";
+            ErrorMessage = $"'{SelectedTopicDetail.Topic.Name}' has a single partition; there is nothing to reduce.";
+            return;
+        }
+        if (_recreatePartitionCount is not int requestedCount)
+        {
+            ErrorMessage = "Enter the new partition count.";
+            return;
+        }
+        if (requestedCount < 1 || requestedCount >= currentCount)
+        {
+            ErrorMessage = $"New partition count must be between 1 and {currentCount - 1} " +
+                           $"(the topic currently has {currentCount}).";
             return;
         }
 
         var topicName = SelectedTopicDetail.Topic.Name;
-        var replicationFactor = SelectedTopicDetail.Topic.ReplicationFactor;
         IsBusy = true;
         ErrorMessage = null;
         try
         {
-            await _topicService.RecreateTopicWithFewerPartitionsAsync(_session, topicName, _recreatePartitionCount, replicationFactor);
-            IsRecreatingTopic = false;
-            await LoadTopicsAsync();
+            await _topicService.DeleteAndRecreateTopicAsync(_session, topicName, requestedCount);
+            ActiveForm = TopicsFormMode.None;
+            // ReloadTopicsAsync, not LoadTopicsAsync: IsBusy must stay true until the finally below,
+            // through the detail load and reselect that follow.
+            await ReloadTopicsAsync();
             await LoadDetailAsync(topicName);
+            ReselectTopicByName(topicName);
+        }
+        catch (TopicRecreateFailedException ex)
+        {
+            ErrorMessage = BuildRecreateFailureMessage(ex);
+            if (ex.TopicMayBeDeleted) await ResyncAfterPossibleDeletionAsync(topicName);
+
+            // Close the form when the topic may be gone. Leaving it open leaves a primed
+            // destructive button beside an already-typed confirmation name, and the next click
+            // both re-runs a destructive operation against a topic that may no longer exist and
+            // wipes the message that is currently the only record of how it was configured.
+            // A refused delete is different: nothing happened, and retrying is reasonable.
+            if (ex.TopicMayBeDeleted) ActiveForm = TopicsFormMode.None;
         }
         catch (Exception ex)
         {
-            bool? stillExists = null;
-            try
-            {
-                stillExists = (await _topicService.ListTopicsAsync(_session)).Any(t => t.Name == topicName);
-            }
-            catch
-            {
-                // Existence check itself failed; fall back to the original error below.
-            }
-
-            ErrorMessage = stillExists == false
-                ? $"Topic '{topicName}' was deleted but could not be recreated: {ex.Message}. You may need to recreate it manually."
-                : ex.Message;
+            // No DATA LOSS RISK prefix here: the saga wraps everything that can fail after the
+            // delete in TopicRecreateFailedException, caught above, so whatever lands here refused
+            // before touching the topic.
+            ErrorMessage = UserFacing(ex);
         }
         finally { IsBusy = false; }
+    }
+
+    /// <summary>
+    /// The sentence to put in the banner for an exception the app did not write itself.
+    /// </summary>
+    /// <remarks>
+    /// ArgumentException.Message appends "(Parameter 'x')" to the sentence, and
+    /// ArgumentOutOfRangeException adds "Actual value was N." on a following line. Those are
+    /// framework tails, sitting next to messages the rest of the app writes by hand - the sentence
+    /// the service wrote is the part that belongs on screen. Trim is load-bearing, not cosmetic: on
+    /// Windows the separator is CRLF, so splitting on '\n' leaves a stray '\r' behind.
+    /// <para>
+    /// Applied in every catch that shows a raw exception message, not just the recreate's: the
+    /// banner is the same banner, and a caller that starts validating its arguments locally should
+    /// not have to remember to add this.
+    /// </para>
+    /// </remarks>
+    private static string UserFacing(Exception ex)
+    {
+        if (ex is not ArgumentException) return ex.Message;
+
+        var firstLine = ex.Message.Split('\n')[0];
+        var paren = firstLine.LastIndexOf(" (Parameter", StringComparison.Ordinal);
+        return (paren >= 0 ? firstLine[..paren] : firstLine).Trim();
+    }
+
+    /// <summary>
+    /// Re-points SelectedTopic at the refreshed TopicInfo instance.
+    /// </summary>
+    /// <remarks>
+    /// ApplyFilter clears the ObservableCollection, which makes the ListBox set SelectedIndex to -1
+    /// and write null back through the two-way binding. The re-added item does not restore it
+    /// either: TopicInfo is a record with value equality, and the partition count just changed, so
+    /// TopicInfo("orders", 2, 1) is not equal to TopicInfo("orders", 4, 1).
+    ///
+    /// Without this the detail panel stays open showing the topic while SelectedTopic is null, and
+    /// the delete button - whose CommandParameter reads from the selection - fires with a null name.
+    /// Assigning the backing field directly rather than the property avoids re-triggering the
+    /// setter's fire-and-forget detail load, which LoadDetailAsync has just done.
+    ///
+    /// Coverage note: the unit test for this can only reach the STALE-selection variant (no ListBox
+    /// to write null back), so the null-write-back path this method exists for is verified only by
+    /// a manual smoke test in the running Avalonia UI. If the ListBox's null write-back is deferred
+    /// past this call, this would need to re-run after it - not reproducible headless.
+    /// </remarks>
+    private void ReselectTopicByName(string topicName)
+    {
+        var refreshed = Topics.FirstOrDefault(t => t.Name == topicName);
+        if (refreshed is null) return;
+
+        _selectedTopic = refreshed;
+        this.RaisePropertyChanged(nameof(SelectedTopic));
+    }
+
+    /// <summary>
+    /// After a failure that may have deleted the topic, refresh the list so the UI stops offering
+    /// actions on something that no longer exists.
+    /// </summary>
+    /// <remarks>
+    /// The previous code fetched this same list purely to compute a bool and threw the result away,
+    /// leaving Delete / Increase / Recreate live on a destroyed topic.
+    /// </remarks>
+    private async Task ResyncAfterPossibleDeletionAsync(string topicName)
+    {
+        try
+        {
+            await ReloadTopicsAsync();
+
+            if (_allTopics.Any(t => t.Name == topicName))
+            {
+                // Deletion had not propagated yet. The warning stands, but the topic is still there
+                // and the user should not be shown an empty panel as if it had vanished.
+                ReselectTopicByName(topicName);
+                return;
+            }
+
+            _selectedTopic = null;
+            this.RaisePropertyChanged(nameof(SelectedTopic));
+            SelectedTopicDetail = null;
+        }
+        catch
+        {
+            // The refresh failed too - most likely the same outage that broke the recreate. Keep
+            // the data-loss message already in ErrorMessage; it is the one that matters.
+        }
+    }
+
+    /// <summary>
+    /// The service decides whether the data is at risk; this only decides how loudly to say it.
+    /// </summary>
+    /// <remarks>
+    /// The previous version asked the cluster whether the topic still existed and warned only when
+    /// it was already gone. That reads the wrong signal: Kafka deletion is asynchronous, so in the
+    /// likeliest failure — the propagation timeout — the topic is still listed at the moment of
+    /// failure. The user was told "timed out", concluded nothing had happened, and the deletion
+    /// completed behind them with nothing recreated.
+    /// </remarks>
+    private static string BuildRecreateFailureMessage(TopicRecreateFailedException ex)
+    {
+        // Not at risk: the service already explains what happened and that nothing was modified.
+        // Adding a scary prefix here would train the user to dismiss the ones that matter.
+        if (!ex.TopicMayBeDeleted) return ex.Message;
+
+        var overrides = ex.PreservedConfig.Count > 0
+            ? string.Join(", ", ex.PreservedConfig.Select(kv => $"{kv.Key}={kv.Value}"))
+            : "none";
+
+        // Everything needed to rebuild it by hand goes in the message: the topic is gone, so
+        // neither the topic list nor the detail panel can answer "what was it?" any more.
+        //
+        // The instruction stays "check it" rather than "recreate it": in one of these cases the
+        // service has just reported that something ELSE took the name back, and "recreate it
+        // manually" followed literally would mean deleting a topic that is not ours.
+        return $"DATA LOSS RISK: {ex.Message} Check '{ex.TopicName}' on your cluster before doing " +
+               $"anything else — it had {ex.Attempt.OriginalPartitionCount} partitions, replication " +
+               $"factor {ex.Attempt.ReplicationFactor}, config overrides: {overrides}.";
     }
 
     public async Task ExpandPartitionsAsync()
     {
         if (SelectedTopicDetail == null) return;
         var currentCount = SelectedTopicDetail.Partitions.Count;
-        if (_newPartitionCount <= currentCount)
+        if (_expandToPartitionCount is not int requestedCount)
+        {
+            ErrorMessage = "Enter the new partition count.";
+            return;
+        }
+        if (requestedCount <= currentCount)
         {
             ErrorMessage = $"New partition count must be greater than the current count ({currentCount}).";
             return;
@@ -193,19 +395,20 @@ public class TopicsViewModel : ReactiveObject, IRoutableViewModel
         ErrorMessage = null;
         try
         {
-            await _topicService.ExpandPartitionsAsync(_session, topicName, _newPartitionCount);
-            IsExpandingPartitions = false;
-            await LoadTopicsAsync();
+            await _topicService.ExpandPartitionsAsync(_session, topicName, requestedCount);
+            ActiveForm = TopicsFormMode.None;
+            // ReloadTopicsAsync, not LoadTopicsAsync: keep IsBusy true through the detail load.
+            await ReloadTopicsAsync();
             await LoadDetailAsync(topicName);
         }
-        catch (Exception ex) { ErrorMessage = ex.Message; }
+        catch (Exception ex) { ErrorMessage = UserFacing(ex); }
         finally { IsBusy = false; }
     }
 
-    public void ViewPartitionMessages(int partition)
+    public void ViewPartitionMessages(int partitionId)
     {
         if (SelectedTopicDetail == null) return;
-        _onViewPartitionMessages(SelectedTopicDetail.Topic.Name, partition);
+        _onViewPartitionMessages(SelectedTopicDetail.Topic.Name, partitionId);
     }
 
     public async Task LoadTopicsAsync()
@@ -214,11 +417,23 @@ public class TopicsViewModel : ReactiveObject, IRoutableViewModel
         ErrorMessage = null;
         try
         {
-            _allTopics = (await _topicService.ListTopicsAsync(_session)).ToList();
-            ApplyFilter();
+            await ReloadTopicsAsync();
         }
-        catch (Exception ex) { ErrorMessage = ex.Message; }
+        catch (Exception ex) { ErrorMessage = UserFacing(ex); }
         finally { IsBusy = false; }
+    }
+
+    /// <summary>
+    /// Refreshes the topic list WITHOUT touching IsBusy. Callers already inside a busy operation
+    /// (recreate/expand success paths, the post-failure resync) must use this, not LoadTopicsAsync:
+    /// that method's own finally would clear IsBusy mid-operation, re-enabling every gated control
+    /// while a detail load is still in flight - the delete button goes live on the just-recreated
+    /// topic, and a concurrent selection desyncs the panel from the list.
+    /// </summary>
+    private async Task ReloadTopicsAsync()
+    {
+        _allTopics = (await _topicService.ListTopicsAsync(_session)).ToList();
+        ApplyFilter();
     }
 
     public async Task DeleteTopicAsync(string topicName)
@@ -241,7 +456,7 @@ public class TopicsViewModel : ReactiveObject, IRoutableViewModel
             }
             ApplyFilter();
         }
-        catch (Exception ex) { ErrorMessage = ex.Message; }
+        catch (Exception ex) { ErrorMessage = UserFacing(ex); }
         finally { IsBusy = false; }
     }
 
@@ -252,17 +467,25 @@ public class TopicsViewModel : ReactiveObject, IRoutableViewModel
         try
         {
             await _topicService.CreateTopicAsync(_session, _newTopicName, _newTopicPartitions, (short)_newTopicReplicationFactor);
-            IsCreatingTopic = false;
+            ActiveForm = TopicsFormMode.None;
             await LoadTopicsAsync();
         }
-        catch (Exception ex) { ErrorMessage = ex.Message; }
+        catch (Exception ex) { ErrorMessage = UserFacing(ex); }
         finally { IsBusy = false; }
     }
 
     private async Task LoadDetailAsync(string topicName)
     {
         try { SelectedTopicDetail = await _topicService.GetTopicDetailAsync(_session, topicName); }
-        catch (Exception ex) { ErrorMessage = ex.Message; }
+        catch (Exception ex)
+        {
+            // Clear it, do not leave the previously loaded topic on screen. Otherwise the panel and
+            // the list disagree about what is selected, and the panel's own actions target two
+            // different topics: expand/recreate read SelectedTopicDetail.Topic.Name while the
+            // delete button's CommandParameter reads SelectedTopic.Name.
+            SelectedTopicDetail = null;
+            ErrorMessage = UserFacing(ex);
+        }
     }
 
     private void ApplyFilter()
