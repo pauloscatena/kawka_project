@@ -17,6 +17,12 @@
         <PackageReference Include="Avalonia.ReactiveUI" Version="11.3.9" />
         <PackageReference Include="Avalonia.Diagnostics" Version="11.3.9" Condition="'$(Configuration)' == 'Debug'" />
         <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="9.0.6" />
+        <!-- Direct reference only to lift a transitive dependency past CVE-2026-39959 (CVSS 7.1):
+             Avalonia.Desktop -> Avalonia.X11 -> Avalonia.FreeDesktop pins Tmds.DBus.Protocol 0.21.2,
+             where a malicious D-Bus peer can spoof signals from a well-known name, exhaust file
+             descriptors, or crash the app with a malformed body. Affects the Linux run only.
+             Remove this line once Avalonia itself resolves 0.21.3 or newer. -->
+        <PackageReference Include="Tmds.DBus.Protocol" Version="0.21.3" />
     </ItemGroup>
     <ItemGroup>
         <ProjectReference Include="..\Skat.KawkaProject.Kafka\Skat.KawkaProject.Kafka.csproj" />
