@@ -112,7 +112,7 @@ Ao fim desta fase a ferramenta já é útil por SSH: conecta, lista e descreve t
 - Consumes: nada.
 - Produces: `CommandResult` (`Table`/`Pairs`/`Text`/`Failure`), `ParsedCommand(string Verb, IReadOnlyList<string> Args, IReadOnlyDictionary<string,string?> Flags)`, `ArgumentParser.ParseLine(string)`, `ArgumentParser.ParseArgv(IReadOnlyList<string>)`, `ExitCodes`. Todas as tasks seguintes consomem estes tipos.
 
-- [ ] **Step 1: Criar os dois projetos e registrá-los na solution**
+- [x] **Step 1: Criar os dois projetos e registrá-los na solution**
 
 ```bash
 cd /mnt/d/dev/Skat/kawka_project/src
@@ -129,7 +129,7 @@ dotnet add Skat.KawkaProject.Tui.Tests package Spectre.Console --version 0.57.2
 rm Skat.KawkaProject.Tui/Program.cs
 ```
 
-- [ ] **Step 2: Escrever o teste que falha**
+- [x] **Step 2: Escrever o teste que falha**
 
 Criar `Skat.KawkaProject.Tui.Tests/ArgumentParserTests.cs`:
 
@@ -177,12 +177,12 @@ public class ArgumentParserTests
 }
 ```
 
-- [ ] **Step 3: Rodar o teste para confirmar que falha**
+- [x] **Step 3: Rodar o teste para confirmar que falha**
 
 Run: `dotnet test Skat.KawkaProject.Tui.Tests`
 Expected: FAIL com erro de compilação — `ArgumentParser` não existe.
 
-- [ ] **Step 4: Implementar os tipos base**
+- [x] **Step 4: Implementar os tipos base**
 
 `Skat.KawkaProject.Tui/ExitCodes.cs`:
 
@@ -299,12 +299,12 @@ public static class ArgumentParser
 }
 ```
 
-- [ ] **Step 5: Rodar os testes para confirmar que passam**
+- [x] **Step 5: Rodar os testes para confirmar que passam**
 
 Run: `dotnet test Skat.KawkaProject.Tui.Tests`
 Expected: PASS, 4 testes.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add Skat.KawkaProject.Tui Skat.KawkaProject.Tui.Tests Skat.KawkaProject.sln
