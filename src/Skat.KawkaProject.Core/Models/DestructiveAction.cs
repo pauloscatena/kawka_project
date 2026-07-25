@@ -20,13 +20,14 @@ public sealed record DestructiveAction(
     IReadOnlyList<string> WhatIsPreserved)
 {
     /// <summary>The message loss, named so a frontend that already states it in a headline can drop
-    /// it from its inventory line without depending on this list's order.</summary>
+    /// it from its inventory line without depending on this list's order. Public because that is a
+    /// real caller's need; the other entries stay private until one of them has the same.</summary>
     public const string LostMessages = "all messages in the topic";
 
     /// <summary>Names auto.offset.reset on purpose: it is the setting that decides whether a
     /// consumer skips or replays, so it is what the user has to go and check before recreating.
     /// "Consumers may skip or replay" alone says something will happen but not where to look.</summary>
-    public const string LostOffsets =
+    private const string LostOffsets =
         "committed consumer group offsets (depending on auto.offset.reset, consumers may then silently skip or replay records)";
 
     /// <summary>What a shrink-by-recreate destroys. ACLs are deliberately excluded: literal ACLs on
