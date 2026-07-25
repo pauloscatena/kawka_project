@@ -489,6 +489,82 @@ public class TopicsViewModelTests
     }
 
     [Fact]
+    public async Task RecreateTopicAsync_refuses_an_empty_partition_count_instead_of_using_a_stale_one()
+    {
+        var svc = new Mock<ITopicService>();
+        svc.Setup(s => s.ListTopicsAsync(It.IsAny<IKafkaSession>()))
+           .ReturnsAsync(new[] { new TopicInfo("orders", 4, 1) });
+        svc.Setup(s => s.GetTopicDetailAsync(It.IsAny<IKafkaSession>(), "orders"))
+           .ReturnsAsync(new TopicDetail(new TopicInfo("orders", 4, 1),
+               new List<PartitionInfo> { new(0, 1, 0, 0), new(1, 1, 0, 0), new(2, 1, 0, 0), new(3, 1, 0, 0) }));
+
+        var vm = new TopicsViewModel(FakeScreen(), FakeSession(), svc.Object, NoOpNavigate);
+        await vm.LoadTopicsAsync();
+        vm.SelectedTopic = vm.Topics[0];
+        vm.ShowRecreateFormCommand.Execute(null);
+        vm.RecreateConfirmName = "orders";
+
+        // The box was cleared. With a non-nullable int the binding write silently failed and the VM
+        // kept the pre-filled value, so a destructive recreate ran with a count the user never chose
+        // and could not see on screen.
+        vm.RecreatePartitionCount = null;
+
+        await vm.RecreateTopicAsync();
+
+        svc.Verify(s => s.RecreateTopicWithFewerPartitionsAsync(
+            It.IsAny<IKafkaSession>(), It.IsAny<string>(), It.IsAny<int>(), It.IsAny<short>()), Times.Never);
+        Assert.Contains("Enter", vm.ErrorMessage);
+    }
+
+    [Fact]
+    public async Task RecreateTopicAsync_explains_a_single_partition_topic_cannot_shrink()
+    {
+        var svc = new Mock<ITopicService>();
+        svc.Setup(s => s.ListTopicsAsync(It.IsAny<IKafkaSession>()))
+           .ReturnsAsync(new[] { new TopicInfo("solo", 1, 1) });
+        svc.Setup(s => s.GetTopicDetailAsync(It.IsAny<IKafkaSession>(), "solo"))
+           .ReturnsAsync(new TopicDetail(new TopicInfo("solo", 1, 1),
+               new List<PartitionInfo> { new(0, 1, 0, 0) }));
+
+        var vm = new TopicsViewModel(FakeScreen(), FakeSession(), svc.Object, NoOpNavigate);
+        await vm.LoadTopicsAsync();
+        vm.SelectedTopic = vm.Topics[0];
+        vm.ShowRecreateFormCommand.Execute(null);
+        vm.RecreateConfirmName = "solo";
+
+        await vm.RecreateTopicAsync();
+
+        // The user reads a warning, carefully types the topic name, clicks — and the old code
+        // answered "must be between 1 and 0", a nonsense range at the worst possible moment.
+        Assert.DoesNotContain("between 1 and 0", vm.ErrorMessage);
+        Assert.Contains("nothing to reduce", vm.ErrorMessage);
+        svc.Verify(s => s.RecreateTopicWithFewerPartitionsAsync(
+            It.IsAny<IKafkaSession>(), It.IsAny<string>(), It.IsAny<int>(), It.IsAny<short>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task ExpandPartitionsAsync_refuses_an_empty_partition_count()
+    {
+        var svc = new Mock<ITopicService>();
+        svc.Setup(s => s.ListTopicsAsync(It.IsAny<IKafkaSession>()))
+           .ReturnsAsync(new[] { new TopicInfo("orders", 2, 1) });
+        svc.Setup(s => s.GetTopicDetailAsync(It.IsAny<IKafkaSession>(), "orders"))
+           .ReturnsAsync(new TopicDetail(new TopicInfo("orders", 2, 1),
+               new List<PartitionInfo> { new(0, 1, 0, 0), new(1, 1, 0, 0) }));
+
+        var vm = new TopicsViewModel(FakeScreen(), FakeSession(), svc.Object, NoOpNavigate);
+        await vm.LoadTopicsAsync();
+        vm.SelectedTopic = vm.Topics[0];
+        vm.ShowExpandFormCommand.Execute(null);
+        vm.NewPartitionCount = null;
+
+        await vm.ExpandPartitionsAsync();
+
+        svc.Verify(s => s.ExpandPartitionsAsync(It.IsAny<IKafkaSession>(), It.IsAny<string>(), It.IsAny<int>()), Times.Never);
+        Assert.Contains("Enter", vm.ErrorMessage);
+    }
+
+    [Fact]
     public async Task RecreateTopicAsync_rejects_count_outside_valid_range()
     {
         var svc = new Mock<ITopicService>();

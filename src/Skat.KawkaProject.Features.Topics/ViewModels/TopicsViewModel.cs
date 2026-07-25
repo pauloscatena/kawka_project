@@ -30,9 +30,9 @@ public class TopicsViewModel : ReactiveObject, IRoutableViewModel
     private int _newTopicPartitions = 1;
     private int _newTopicReplicationFactor = 1;
     private bool _isExpandingPartitions;
-    private int _newPartitionCount = 1;
+    private int? _newPartitionCount = 1;
     private bool _isRecreatingTopic;
-    private int _recreatePartitionCount = 1;
+    private int? _recreatePartitionCount = 1;
     private string _recreateConfirmName = "";
 
     public bool IsCreatingTopic { get => _isCreatingTopic; private set { this.RaiseAndSetIfChanged(ref _isCreatingTopic, value); this.RaisePropertyChanged(nameof(IsNotCreatingTopic)); } }
@@ -42,10 +42,14 @@ public class TopicsViewModel : ReactiveObject, IRoutableViewModel
     public int NewTopicReplicationFactor { get => _newTopicReplicationFactor; set => this.RaiseAndSetIfChanged(ref _newTopicReplicationFactor, value); }
     public bool IsExpandingPartitions { get => _isExpandingPartitions; private set { this.RaiseAndSetIfChanged(ref _isExpandingPartitions, value); this.RaisePropertyChanged(nameof(IsNotExpandingPartitions)); } }
     public bool IsNotExpandingPartitions => !_isExpandingPartitions;
-    public int NewPartitionCount { get => _newPartitionCount; set => this.RaiseAndSetIfChanged(ref _newPartitionCount, value); }
+    // Nullable because NumericUpDown.Value is decimal?: clearing the box must mean "no value", not
+    // silently keep the previous one - which, on a destructive recreate, means running with a count
+    // the user never chose and cannot see.
+    public int? NewPartitionCount { get => _newPartitionCount; set => this.RaiseAndSetIfChanged(ref _newPartitionCount, value); }
     public bool IsRecreatingTopic { get => _isRecreatingTopic; private set { this.RaiseAndSetIfChanged(ref _isRecreatingTopic, value); this.RaisePropertyChanged(nameof(IsNotRecreatingTopic)); } }
     public bool IsNotRecreatingTopic => !_isRecreatingTopic;
-    public int RecreatePartitionCount { get => _recreatePartitionCount; set => this.RaiseAndSetIfChanged(ref _recreatePartitionCount, value); }
+    /// <summary>Nullable for the same reason as <see cref="NewPartitionCount"/>.</summary>
+    public int? RecreatePartitionCount { get => _recreatePartitionCount; set => this.RaiseAndSetIfChanged(ref _recreatePartitionCount, value); }
     public string RecreateConfirmName
     {
         get => _recreateConfirmName;
@@ -155,9 +159,23 @@ public class TopicsViewModel : ReactiveObject, IRoutableViewModel
     {
         if (SelectedTopicDetail == null || !CanConfirmRecreate) return;
         var currentCount = SelectedTopicDetail.Partitions.Count;
-        if (_recreatePartitionCount < 1 || _recreatePartitionCount >= currentCount)
+
+        // Before the range check: with one partition the valid range is empty and the range message
+        // would read "between 1 and 0". This is a fact about the topic, not the input.
+        if (currentCount <= 1)
         {
-            ErrorMessage = $"New partition count must be between 1 and {currentCount - 1}.";
+            ErrorMessage = $"'{SelectedTopicDetail.Topic.Name}' has a single partition; there is nothing to reduce.";
+            return;
+        }
+        if (_recreatePartitionCount is not int requestedCount)
+        {
+            ErrorMessage = "Enter the new partition count.";
+            return;
+        }
+        if (requestedCount < 1 || requestedCount >= currentCount)
+        {
+            ErrorMessage = $"New partition count must be between 1 and {currentCount - 1} " +
+                           $"(the topic currently has {currentCount}).";
             return;
         }
 
@@ -167,7 +185,7 @@ public class TopicsViewModel : ReactiveObject, IRoutableViewModel
         ErrorMessage = null;
         try
         {
-            await _topicService.RecreateTopicWithFewerPartitionsAsync(_session, topicName, _recreatePartitionCount, replicationFactor);
+            await _topicService.RecreateTopicWithFewerPartitionsAsync(_session, topicName, requestedCount, replicationFactor);
             IsRecreatingTopic = false;
             await LoadTopicsAsync();
             await LoadDetailAsync(topicName);
@@ -289,7 +307,12 @@ public class TopicsViewModel : ReactiveObject, IRoutableViewModel
     {
         if (SelectedTopicDetail == null) return;
         var currentCount = SelectedTopicDetail.Partitions.Count;
-        if (_newPartitionCount <= currentCount)
+        if (_newPartitionCount is not int requestedCount)
+        {
+            ErrorMessage = "Enter the new partition count.";
+            return;
+        }
+        if (requestedCount <= currentCount)
         {
             ErrorMessage = $"New partition count must be greater than the current count ({currentCount}).";
             return;
@@ -300,7 +323,7 @@ public class TopicsViewModel : ReactiveObject, IRoutableViewModel
         ErrorMessage = null;
         try
         {
-            await _topicService.ExpandPartitionsAsync(_session, topicName, _newPartitionCount);
+            await _topicService.ExpandPartitionsAsync(_session, topicName, requestedCount);
             IsExpandingPartitions = false;
             await LoadTopicsAsync();
             await LoadDetailAsync(topicName);
