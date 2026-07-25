@@ -11,5 +11,11 @@ namespace Skat.KawkaProject.Tui;
 /// </remarks>
 internal static class Program
 {
-    private static int Main(string[] args) => ExitCodes.OperationalFailure;
+    private static int Main(string[] args)
+    {
+        // Says so out loud rather than just returning non-zero: a silent failure is
+        // indistinguishable from a real one for anyone who runs the half-assembled tool.
+        Console.Error.WriteLine("kawka: the command line entry point is not wired up yet (Task 6).");
+        return ExitCodes.OperationalFailure;
+    }
 }

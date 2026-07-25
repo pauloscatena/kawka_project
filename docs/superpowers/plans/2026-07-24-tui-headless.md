@@ -514,6 +514,15 @@ git commit -m "feat(tui): add Spectre and plain-text result renderers"
 
 ### Task 3: Contrato de comando, registry e dispatcher
 
+> **Achado do gate da Task 1, a honrar aqui:** o `ArgumentParser` normaliza o nome das flags
+> (`StringComparer.OrdinalIgnoreCase`) mas **não** o verbo — `ParseLine("TOPICS")` devolve
+> `Verb == "TOPICS"` cru. O lookup verbo→handler do `CommandRegistry` PRECISA ser
+> `OrdinalIgnoreCase`, senão `TOPICS` vira "comando desconhecido" enquanto `--OUTPUT` funciona,
+> uma assimetria que ninguém consegue adivinhar. Confirme também que o dispatcher captura
+> `Exception` e não apenas tipos específicos: `ParsedCommand.IntFlag` lança `FormatException` para
+> valor não numérico, e hoje não há ninguém entre ele e o topo do REPL.
+
+
 O dispatcher é a **única** fronteira que captura `Exception`. É isso que impede cada comando de inventar seu próprio formato de mensagem de erro.
 
 **Files:**
