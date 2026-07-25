@@ -727,4 +727,22 @@ public class TopicsViewModelTests
         Assert.DoesNotContain("Actual value was", vm.ErrorMessage);
         Assert.DoesNotContain("DATA LOSS RISK", vm.ErrorMessage);   // nothing was deleted
     }
+
+    [Fact]
+    public void The_recreate_warning_reads_its_consequences_from_the_canonical_list()
+    {
+        // The warning panel binds to these two properties. Restating the consequences in XAML - or
+        // rewording them here - is how the GUI, the ITopicService contract and the planned TUI
+        // drifted into three lists that could disagree about what a recreate destroys.
+        var vm = new TopicsViewModel(FakeScreen(), FakeSession(), Mock.Of<ITopicService>(), NoOpNavigate);
+
+        foreach (var loss in DestructiveAction.RecreateLoses)
+            Assert.Contains(loss, vm.RecreateWhatIsLost);
+        foreach (var kept in DestructiveAction.RecreatePreserves)
+            Assert.Contains(kept, vm.RecreateWhatIsPreserved);
+
+        // The halves must not be swapped: config overrides survive, messages do not.
+        Assert.DoesNotContain("config", vm.RecreateWhatIsLost, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("message", vm.RecreateWhatIsPreserved, StringComparison.OrdinalIgnoreCase);
+    }
 }

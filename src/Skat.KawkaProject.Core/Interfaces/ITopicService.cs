@@ -22,9 +22,11 @@ public interface ITopicService
     /// DELETES the topic and recreates it with fewer partitions. Kafka cannot shrink partitions in
     /// place, so this is destructive: <b>ALL MESSAGES IN THE TOPIC ARE PERMANENTLY LOST</b>.
     /// <para>
-    /// Carried over: topic-level config overrides (see <see cref="GetTopicConfigOverridesAsync"/>).
-    /// NOT carried over: messages, committed consumer group offsets (consumers may then silently
-    /// skip or replay records), and ACLs.
+    /// What is lost and what survives is enumerated once, in
+    /// <see cref="Skat.KawkaProject.Core.Models.DestructiveAction.Recreate"/>: read it there rather
+    /// than restating it, so a frontend's warning cannot drift from this contract. Config overrides
+    /// are carried over (see <see cref="GetTopicConfigOverridesAsync"/>). ACLs are not on the loss
+    /// list: literal ACLs on the same topic name survive delete+recreate.
     /// </para>
     /// <para>
     /// The replication factor is derived from the live topic; a non-uniform assignment is flattened

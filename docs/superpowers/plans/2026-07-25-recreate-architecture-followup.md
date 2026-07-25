@@ -391,7 +391,7 @@ A lista "o que se perde numa operação destrutiva" existe em três lugares que 
 **Interfaces:**
 - Produces: `record DestructiveAction(string TopicName, string Verb, IReadOnlyList<string> WhatIsLost)` em `Skat.KawkaProject.Core.Models`, mais uma factory estática canônica `DestructiveAction.Recreate(string topicName)` que enumera o que o recreate perde.
 
-- [ ] **Step 1: Escrever o teste da factory**
+- [x] **Step 1: Escrever o teste da factory**
 
 Criar em `TopicsViewModelTests.cs` (ou um `DestructiveActionTests.cs` em Core.Tests — preferir Core.Tests já que o tipo é do Core):
 
@@ -424,7 +424,7 @@ public class DestructiveActionTests
 Run: `dotnet test Skat.KawkaProject.Core.Tests`
 Expected: FALHA DE COMPILAÇÃO — `DestructiveAction` não existe.
 
-- [ ] **Step 2: Criar o tipo no Core**
+- [x] **Step 2: Criar o tipo no Core**
 
 Criar `Skat.KawkaProject.Core/Models/DestructiveAction.cs`:
 
@@ -454,7 +454,7 @@ public sealed record DestructiveAction(string TopicName, string Verb, IReadOnlyL
 Run: `dotnet test Skat.KawkaProject.Core.Tests`
 Expected: PASS.
 
-- [ ] **Step 3: Consumir a lista no aviso da VM/AXAML**
+- [x] **Step 3: Consumir a lista no aviso da VM/AXAML**
 
 O aviso hoje é texto fixo no `TopicsView.axaml`. Expor uma propriedade na VM que projeta `DestructiveAction.Recreate(topic).WhatIsLost` como texto e bindar o AXAML nela — ou, mais simples e testável, manter o AXAML e apenas garantir que a mensagem de falha (`BuildRecreateFailureMessage`) e o aviso derivem da MESMA fonte. Passo mínimo que fecha a duplicação sem reescrever o AXAML: em `TopicsViewModel`, adicionar:
 
@@ -468,16 +468,22 @@ E no `TopicsView.axaml`, trocar o segundo TextBlock de aviso (o de offsets, text
 
 > Se preferir não bindar (evitar recalcular por seleção), deixar o AXAML fixo e apenas usar `DestructiveAction.Recreate` dentro de `BuildRecreateFailureMessage`. O objetivo da task é UMA fonte para a lista; escolha o ponto de consumo, mas não deixe duas listas divergirem.
 
-- [ ] **Step 4: Rodar build + suíte**
+> **Decisões tomadas na execução (2026-07-25), divergindo do desenho acima:**
+> 1. **O record carrega `WhatIsPreserved` além de `WhatIsLost`.** O doc-comment do `ITopicService` e o AXAML já mantinham as duas metades juntas ("NOT carried over: … / Carried over: config overrides"). Centralizar só as perdas deixaria "config overrides são preservados" duplicado exatamente nos mesmos dois lugares que a task veio fechar — e um aviso que só lista perdas manda o usuário reaplicar config que a saga já carregou.
+> 2. **As listas são expostas como `DestructiveAction.RecreateLoses`/`RecreatePreserves`,** com `Recreate(topicName)` montando o record a partir delas. Um consumidor que só quer o texto (o painel de aviso) lê as listas sem inventar um nome de tópico fake; um consumidor que age sobre um tópico (a TUI) usa a factory.
+> 3. **A VM expõe duas propriedades (`RecreateWhatIsLost`, `RecreateWhatIsPreserved`) e o AXAML tem dois TextBlocks.** São constantes da operação, não do tópico selecionado — o texto nunca interpola o nome —, então não precisam de `RaisePropertyChanged`.
+> 4. **O doc-comment do `ITopicService` era o terceiro lugar divergente e foi corrigido:** afirmava que ACLs se perdem, o que contradiz a lista canônica e é falso (ACLs literais no mesmo nome sobrevivem). Agora aponta para `DestructiveAction.Recreate` em vez de repetir a lista.
+
+- [x] **Step 4: Rodar build + suíte**
 
 Run: `dotnet build && dotnet test`
 Expected: PASS.
 
-- [ ] **Step 5: Apontar o spec da TUI para o tipo do Core**
+- [x] **Step 5: Apontar o spec da TUI para o tipo do Core**
 
 Em `docs/superpowers/specs/2026-07-24-tui-headless-design.md`, na seção de confirmação destrutiva: trocar o desenho de um `DestructiveAction` próprio da TUI por "reusa `Skat.KawkaProject.Core.Models.DestructiveAction`; o `IConfirmer` recebe esse record". Ajustar o plano `2026-07-24-tui-headless.md` (Fase 4) na mesma linha.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add -A

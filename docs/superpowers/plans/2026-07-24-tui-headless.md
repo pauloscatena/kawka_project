@@ -79,7 +79,6 @@ Skat.KawkaProject.Tui/
     PromptReader.cs          — caixa com borda, setas, histórico
   Safety/
     IConfirmer.cs
-    DestructiveAction.cs
     InteractiveConfirmer.cs
     NonInteractiveConfirmer.cs
 
@@ -736,12 +735,12 @@ public sealed class CommandDispatcher(CommandRegistry registry)
 }
 ```
 
-`Skat.KawkaProject.Tui/Safety/IConfirmer.cs` e `DestructiveAction.cs` (stubs mínimos agora; implementações reais na Fase 4):
+`Skat.KawkaProject.Tui/Safety/IConfirmer.cs` (stub mínimo agora; implementações reais na Fase 4). **`DestructiveAction` NÃO é declarado aqui** — desde 2026-07-25 ele mora em `Skat.KawkaProject.Core.Models` como o lar único do "o que se perde", já consumido pelo GUI:
 
 ```csharp
-namespace Skat.KawkaProject.Tui.Safety;
+using Skat.KawkaProject.Core.Models;   // DestructiveAction
 
-public sealed record DestructiveAction(string TopicName, string Verb, IReadOnlyList<string> WhatIsLost);
+namespace Skat.KawkaProject.Tui.Safety;
 
 public interface IConfirmer
 {
@@ -2359,8 +2358,9 @@ public class ConfirmerTests
         Out = new AnsiConsoleOutput(new StringWriter())
     });
 
+    // A factory canônica do Core, não uma lista local: é ela que os comandos usam.
     private static DestructiveAction Recreate(string topic = "orders") =>
-        new(topic, "recreate", new[] { "all messages", "consumer group offsets", "ACLs" });
+        DestructiveAction.Recreate(topic);
 
     [Fact]
     public async Task Interactive_accepts_only_the_exact_topic_name()
@@ -2573,7 +2573,8 @@ public class TopicAdminCommandsTests
         Assert.NotNull(confirmer.Seen);
         Assert.Contains(confirmer.Seen!.WhatIsLost, w => w.Contains("message", StringComparison.OrdinalIgnoreCase));
         Assert.Contains(confirmer.Seen.WhatIsLost, w => w.Contains("offset", StringComparison.OrdinalIgnoreCase));
-        Assert.Contains(confirmer.Seen.WhatIsLost, w => w.Contains("ACL", StringComparison.OrdinalIgnoreCase));
+        // NÃO assere ACL: ACLs literais no mesmo nome sobrevivem ao delete+recreate, e a lista
+        // canônica do Core as exclui de propósito (ver DestructiveActionTests).
     }
 
     [Fact]
@@ -2673,12 +2674,15 @@ public sealed class DeleteCommand(ITopicService topics) : ITuiCommand
             return new CommandResult.Failure($"Missing topic name. Usage: {Usage}", ExitCodes.Usage);
 
         var topicName = ctx.Parsed.Args[0];
+        // ACLs ficam FORA da lista: ACLs literais no mesmo nome sobrevivem ao delete. Quando esta
+        // fase for implementada, promover esta lista a uma factory `DestructiveAction.Delete` no
+        // Core, ao lado de `Recreate` - uma lista local aqui reabre a divergência que a
+        // centralização de 2026-07-25 fechou.
         var action = new DestructiveAction(topicName, "delete", new[]
         {
             "all messages in the topic",
-            "committed consumer group offsets for the topic",
-            "the topic's ACLs"
-        });
+            "committed consumer group offsets for the topic"
+        }, Array.Empty<string>());
 
         if (!await ctx.Confirmer.ConfirmAsync(action, ct))
             return new CommandResult.Failure($"Aborted: '{topicName}' was not deleted.", ExitCodes.ConfirmationRefused);
@@ -2729,12 +2733,9 @@ public sealed class RecreateCommand(ITopicService topics) : ITuiCommand
         var session = ctx.RequireSession();
         var topicName = ctx.Parsed.Args[0];
 
-        var action = new DestructiveAction(topicName, "recreate", new[]
-        {
-            "all messages in the topic",
-            "committed consumer group offsets (consumers may silently skip or replay records)",
-            "the topic's ACLs (on a cluster with allow.everyone.if.no.acl.found=true it returns unrestricted)"
-        });
+        // A lista canônica do Core, não uma cópia local: DestructiveAction.Recreate é a mesma
+        // fonte que o painel de aviso do GUI lê.
+        var action = DestructiveAction.Recreate(topicName);
 
         if (!await ctx.Confirmer.ConfirmAsync(action, ct))
             return new CommandResult.Failure($"Aborted: '{topicName}' was not modified.", ExitCodes.ConfirmationRefused);

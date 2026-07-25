@@ -157,7 +157,6 @@ Skat.KawkaProject.Tui/
     PlainTextRenderer.cs     — sem TTY: colunas separadas por tab, sem ANSI
   Safety/
     IConfirmer.cs
-    DestructiveAction.cs
     InteractiveConfirmer.cs
     NonInteractiveConfirmer.cs
 
@@ -206,12 +205,14 @@ public interface IConfirmer
 {
     Task<bool> ConfirmAsync(DestructiveAction action, CancellationToken ct);
 }
-
-public sealed record DestructiveAction(
-    string TopicName,
-    string Verb,                        // "delete" | "recreate"
-    IReadOnlyList<string> WhatIsLost);  // mensagens, offsets de consumer group, ACLs
 ```
+
+`DestructiveAction` **não é declarado pela TUI**: reusa
+`Skat.KawkaProject.Core.Models.DestructiveAction`, criado em 2026-07-25 como o
+lar único do "o que se perde" (record `(TopicName, Verb, WhatIsLost,
+WhatIsPreserved)`, com a factory canônica `DestructiveAction.Recreate(topico)`).
+O GUI já lê dele; a TUI passa o mesmo record ao `IConfirmer`. Redeclarar o tipo
+aqui reintroduziria a divergência que a centralização fechou.
 
 - **`InteractiveConfirmer`** — imprime o bloco de aviso listando `WhatIsLost`
   e exige que o usuário digite o nome exato do tópico. Espelha o gate do GUI.
@@ -225,11 +226,13 @@ Justificativa: sem humano para digitar o nome, a resposta correta não é
 assumir consentimento. Um `cron` mal configurado não pode apagar um tópico
 por causa de um argumento errado. A verbosidade da flag é deliberada.
 
-`WhatIsLost` para `recreate` enumera, no mínimo: todas as mensagens do
-tópico, os offsets commitados de consumer groups (que passam a apontar para
-posições sem significado), e as ACLs do tópico. Overrides de config são
-preservados e isso também é dito, para que a lista não seja lida como
-"perde tudo".
+`WhatIsLost` para `recreate` vem de `DestructiveAction.RecreateLoses`: todas as
+mensagens do tópico e os offsets commitados de consumer groups (que passam a
+apontar para posições sem significado). **ACLs NÃO entram na lista** — ACLs
+literais no mesmo nome de tópico sobrevivem ao delete+recreate, e afirmar o
+contrário mandaria o usuário reconceder permissões que nunca foram revogadas.
+Overrides de config são preservados e isso também é dito (via
+`WhatIsPreserved`), para que a lista não seja lida como "perde tudo".
 
 ## Fluxo de dados
 

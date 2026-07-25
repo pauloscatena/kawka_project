@@ -234,7 +234,10 @@
                             <TextBlock Text="This deletes and recreates the topic. All messages in this topic will be permanently lost. This cannot be undone."
                                        FontSize="10" TextWrapping="Wrap"
                                        Foreground="{DynamicResource StatusErrorBrush}" />
-                            <TextBlock Text="Consumer group offsets are not carried over: depending on auto.offset.reset, consumers may silently skip or replay records. Topic-level config overrides ARE preserved."
+                            <TextBlock Text="{Binding RecreateWhatIsLost}"
+                                       FontSize="10" TextWrapping="Wrap"
+                                       Foreground="{DynamicResource TextPrimaryBrush}" />
+                            <TextBlock Text="{Binding RecreateWhatIsPreserved}"
                                        FontSize="10" TextWrapping="Wrap"
                                        Foreground="{DynamicResource TextPrimaryBrush}" />
                             <StackPanel Orientation="Horizontal" Spacing="6">

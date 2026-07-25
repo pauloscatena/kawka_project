@@ -78,6 +78,14 @@ public class TopicsViewModel : ReactiveObject, IRoutableViewModel
     }
     public bool CanConfirmRecreate => SelectedTopicDetail != null && _recreateConfirmName == SelectedTopicDetail.Topic.Name;
 
+    // The warning panel reads the recreate's consequences from the domain instead of restating them
+    // in XAML, so the GUI, the service doc-comment and the planned TUI cannot drift apart. Both
+    // halves are shown: losses alone would send the user to re-apply config the saga carries over.
+    // These are constants of the operation, not of the selected topic - the wording never names it -
+    // so they need no change notification.
+    public string RecreateWhatIsLost => $"Not carried over: {string.Join("; ", DestructiveAction.RecreateLoses)}.";
+    public string RecreateWhatIsPreserved => $"Preserved: {string.Join("; ", DestructiveAction.RecreatePreserves)}.";
+
     public Interaction<string, bool> ConfirmDelete { get; } = new();
 
     public ICommand LoadCommand { get; }
