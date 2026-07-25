@@ -274,6 +274,52 @@ public class TopicsViewModelTests
     }
 
     [Fact]
+    public async Task Opening_one_inline_form_closes_the_others()
+    {
+        var svc = new Mock<ITopicService>();
+        svc.Setup(s => s.ListTopicsAsync(It.IsAny<IKafkaSession>()))
+           .ReturnsAsync(new[] { new TopicInfo("orders", 4, 1) });
+        svc.Setup(s => s.GetTopicDetailAsync(It.IsAny<IKafkaSession>(), "orders"))
+           .ReturnsAsync(new TopicDetail(new TopicInfo("orders", 4, 1),
+               new List<PartitionInfo> { new(0, 1, 0, 0), new(1, 1, 0, 0), new(2, 1, 0, 0), new(3, 1, 0, 0) }));
+
+        var vm = new TopicsViewModel(FakeScreen(), FakeSession(), svc.Object, NoOpNavigate);
+        await vm.LoadTopicsAsync();
+        vm.SelectedTopic = vm.Topics[0];
+
+        vm.ShowExpandFormCommand.Execute(null);
+        Assert.True(vm.IsExpandingPartitions);
+        Assert.False(vm.IsRecreatingTopic);
+        Assert.False(vm.IsCreatingTopic);
+
+        // The forms share one DockPanel; two open at once put two "New count:" inputs on the panel
+        // whose whole job is to make a destructive operation unambiguous.
+        vm.ShowRecreateFormCommand.Execute(null);
+        Assert.True(vm.IsRecreatingTopic);
+        Assert.False(vm.IsExpandingPartitions);
+
+        vm.ShowCreateFormCommand.Execute(null);
+        Assert.True(vm.IsCreatingTopic);
+        Assert.False(vm.IsRecreatingTopic);
+        Assert.False(vm.IsExpandingPartitions);
+    }
+
+    [Fact]
+    public void The_IsNot_form_flags_are_the_negation_of_their_form()
+    {
+        var vm = new TopicsViewModel(FakeScreen(), FakeSession(), Mock.Of<ITopicService>(), NoOpNavigate);
+
+        Assert.True(vm.IsNotCreatingTopic);
+        Assert.True(vm.IsNotExpandingPartitions);
+        Assert.True(vm.IsNotRecreatingTopic);
+
+        vm.ShowExpandFormCommand.Execute(null);
+        Assert.False(vm.IsNotExpandingPartitions);
+        Assert.True(vm.IsNotRecreatingTopic);
+        Assert.True(vm.IsNotCreatingTopic);
+    }
+
+    [Fact]
     public async Task IsNotBusy_tracks_IsBusy_and_notifies_while_an_operation_is_in_flight()
     {
         var svc = new Mock<ITopicService>();

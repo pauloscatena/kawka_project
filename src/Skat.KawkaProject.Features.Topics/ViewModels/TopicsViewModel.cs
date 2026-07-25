@@ -25,29 +25,46 @@ public class TopicsViewModel : ReactiveObject, IRoutableViewModel
     public string UrlPathSegment => "topics";
 
     public ObservableCollection<TopicInfo> Topics { get; } = new();
-    private bool _isCreatingTopic;
+    private TopicsFormMode _activeForm = TopicsFormMode.None;
     private string _newTopicName = "";
     private int _newTopicPartitions = 1;
     private int _newTopicReplicationFactor = 1;
-    private bool _isExpandingPartitions;
     private int? _expandToPartitionCount = 1;
-    private bool _isRecreatingTopic;
     private int? _recreatePartitionCount = 1;
     private string _recreateConfirmName = "";
 
-    public bool IsCreatingTopic { get => _isCreatingTopic; private set { this.RaiseAndSetIfChanged(ref _isCreatingTopic, value); this.RaisePropertyChanged(nameof(IsNotCreatingTopic)); } }
-    public bool IsNotCreatingTopic => !_isCreatingTopic;
+    /// <summary>
+    /// The single source of truth for which inline form is open. Setting it makes the forms
+    /// mutually exclusive by construction - there is no state in which two are open.
+    /// </summary>
+    public TopicsFormMode ActiveForm
+    {
+        get => _activeForm;
+        private set
+        {
+            this.RaiseAndSetIfChanged(ref _activeForm, value);
+            this.RaisePropertyChanged(nameof(IsCreatingTopic));
+            this.RaisePropertyChanged(nameof(IsNotCreatingTopic));
+            this.RaisePropertyChanged(nameof(IsExpandingPartitions));
+            this.RaisePropertyChanged(nameof(IsNotExpandingPartitions));
+            this.RaisePropertyChanged(nameof(IsRecreatingTopic));
+            this.RaisePropertyChanged(nameof(IsNotRecreatingTopic));
+        }
+    }
+
+    public bool IsCreatingTopic => _activeForm == TopicsFormMode.Create;
+    public bool IsNotCreatingTopic => _activeForm != TopicsFormMode.Create;
     public string NewTopicName { get => _newTopicName; set => this.RaiseAndSetIfChanged(ref _newTopicName, value); }
     public int NewTopicPartitions { get => _newTopicPartitions; set => this.RaiseAndSetIfChanged(ref _newTopicPartitions, value); }
     public int NewTopicReplicationFactor { get => _newTopicReplicationFactor; set => this.RaiseAndSetIfChanged(ref _newTopicReplicationFactor, value); }
-    public bool IsExpandingPartitions { get => _isExpandingPartitions; private set { this.RaiseAndSetIfChanged(ref _isExpandingPartitions, value); this.RaisePropertyChanged(nameof(IsNotExpandingPartitions)); } }
-    public bool IsNotExpandingPartitions => !_isExpandingPartitions;
+    public bool IsExpandingPartitions => _activeForm == TopicsFormMode.Expand;
+    public bool IsNotExpandingPartitions => _activeForm != TopicsFormMode.Expand;
     // Nullable because NumericUpDown.Value is decimal?: clearing the box must mean "no value", not
     // silently keep the previous one - which, on a destructive recreate, means running with a count
     // the user never chose and cannot see.
     public int? ExpandToPartitionCount { get => _expandToPartitionCount; set => this.RaiseAndSetIfChanged(ref _expandToPartitionCount, value); }
-    public bool IsRecreatingTopic { get => _isRecreatingTopic; private set { this.RaiseAndSetIfChanged(ref _isRecreatingTopic, value); this.RaisePropertyChanged(nameof(IsNotRecreatingTopic)); } }
-    public bool IsNotRecreatingTopic => !_isRecreatingTopic;
+    public bool IsRecreatingTopic => _activeForm == TopicsFormMode.Recreate;
+    public bool IsNotRecreatingTopic => _activeForm != TopicsFormMode.Recreate;
     /// <summary>Nullable for the same reason as <see cref="ExpandToPartitionCount"/>.</summary>
     public int? RecreatePartitionCount { get => _recreatePartitionCount; set => this.RaiseAndSetIfChanged(ref _recreatePartitionCount, value); }
     public string RecreateConfirmName
@@ -131,25 +148,25 @@ public class TopicsViewModel : ReactiveObject, IRoutableViewModel
 
         LoadCommand = ReactiveCommand.CreateFromTask(LoadTopicsAsync);
         DeleteTopicCommand = ReactiveCommand.CreateFromTask<string>(DeleteTopicAsync);
-        ShowCreateFormCommand = ReactiveCommand.Create(() => { IsCreatingTopic = true; NewTopicName = ""; NewTopicPartitions = 1; NewTopicReplicationFactor = 1; });
-        CancelCreateCommand = ReactiveCommand.Create(() => IsCreatingTopic = false);
+        ShowCreateFormCommand = ReactiveCommand.Create(() => { ActiveForm = TopicsFormMode.Create; NewTopicName = ""; NewTopicPartitions = 1; NewTopicReplicationFactor = 1; });
+        CancelCreateCommand = ReactiveCommand.Create(() => ActiveForm = TopicsFormMode.None);
         CreateTopicCommand = ReactiveCommand.CreateFromTask(CreateTopicAsync);
         DismissErrorCommand = ReactiveCommand.Create(() => ErrorMessage = null);
         ViewPartitionMessagesCommand = ReactiveCommand.Create<int>(ViewPartitionMessages);
         ShowExpandFormCommand = ReactiveCommand.Create(() =>
         {
-            IsExpandingPartitions = true;
+            ActiveForm = TopicsFormMode.Expand;
             ExpandToPartitionCount = (SelectedTopicDetail?.Partitions.Count ?? 0) + 1;
         });
-        CancelExpandCommand = ReactiveCommand.Create(() => IsExpandingPartitions = false);
+        CancelExpandCommand = ReactiveCommand.Create(() => ActiveForm = TopicsFormMode.None);
         ExpandPartitionsCommand = ReactiveCommand.CreateFromTask(ExpandPartitionsAsync);
         ShowRecreateFormCommand = ReactiveCommand.Create(() =>
         {
-            IsRecreatingTopic = true;
+            ActiveForm = TopicsFormMode.Recreate;
             RecreateConfirmName = "";
             RecreatePartitionCount = Math.Max(1, (SelectedTopicDetail?.Partitions.Count ?? 1) - 1);
         });
-        CancelRecreateCommand = ReactiveCommand.Create(() => IsRecreatingTopic = false);
+        CancelRecreateCommand = ReactiveCommand.Create(() => ActiveForm = TopicsFormMode.None);
         RecreateTopicCommand = ReactiveCommand.CreateFromTask(RecreateTopicAsync);
 
         _ = LoadTopicsAsync();
@@ -186,7 +203,7 @@ public class TopicsViewModel : ReactiveObject, IRoutableViewModel
         try
         {
             await _topicService.DeleteAndRecreateTopicAsync(_session, topicName, requestedCount, replicationFactor);
-            IsRecreatingTopic = false;
+            ActiveForm = TopicsFormMode.None;
             await LoadTopicsAsync();
             await LoadDetailAsync(topicName);
             ReselectTopicByName(topicName);
@@ -201,7 +218,7 @@ public class TopicsViewModel : ReactiveObject, IRoutableViewModel
             // both re-runs a destructive operation against a topic that may no longer exist and
             // wipes the message that is currently the only record of how it was configured.
             // A refused delete is different: nothing happened, and retrying is reasonable.
-            if (ex.TopicMayBeDeleted) IsRecreatingTopic = false;
+            if (ex.TopicMayBeDeleted) ActiveForm = TopicsFormMode.None;
         }
         catch (Exception ex)
         {
@@ -324,7 +341,7 @@ public class TopicsViewModel : ReactiveObject, IRoutableViewModel
         try
         {
             await _topicService.ExpandPartitionsAsync(_session, topicName, requestedCount);
-            IsExpandingPartitions = false;
+            ActiveForm = TopicsFormMode.None;
             await LoadTopicsAsync();
             await LoadDetailAsync(topicName);
         }
@@ -382,7 +399,7 @@ public class TopicsViewModel : ReactiveObject, IRoutableViewModel
         try
         {
             await _topicService.CreateTopicAsync(_session, _newTopicName, _newTopicPartitions, (short)_newTopicReplicationFactor);
-            IsCreatingTopic = false;
+            ActiveForm = TopicsFormMode.None;
             await LoadTopicsAsync();
         }
         catch (Exception ex) { ErrorMessage = ex.Message; }
