@@ -122,6 +122,30 @@ public class MessagesViewModel : ReactiveObject, IRoutableViewModel
         catch { return raw; }
     }
 
+    /// <summary>
+    /// Builds a MessagesViewModel already pointed at one partition and starts the fetch. Owning the
+    /// four-step init protocol (topic, partition, offset mode, fetch) here keeps it in one place
+    /// instead of duplicated at every composition-root call site.
+    /// </summary>
+    public static MessagesViewModel ForPartition(
+        IScreen hostScreen, IKafkaSession session, IMessageService messageService, ITopicService topicService,
+        string topicName, int partitionId)
+    {
+        // Fail fast, and make the contract explicit: with an empty name FetchMessagesAsync would
+        // take its "fetch all topics" branch and prompt for confirmation - meaningless for a
+        // factory that exists to open ONE partition. Every real caller passes a real topic name.
+        ArgumentException.ThrowIfNullOrWhiteSpace(topicName);
+
+        var vm = new MessagesViewModel(hostScreen, session, messageService, topicService)
+        {
+            TopicName = topicName,
+            Partition = partitionId,
+            Mode = MessageMode.Offset,
+        };
+        _ = vm.FetchMessagesAsync();
+        return vm;
+    }
+
     public MessagesViewModel(IScreen hostScreen, IKafkaSession session, IMessageService messageService, ITopicService topicService)
     {
         HostScreen = hostScreen;

@@ -91,21 +91,19 @@ public class ConnectionNodeViewModel : ReactiveObject
             if (_session == null) return;
             shell.Router.Navigate.Execute(
                 new Skat.KawkaProject.Features.Topics.ViewModels.TopicsViewModel(
-                    shell, _session, topicService,
-                    (topicName, partition) =>
-                    {
-                        if (_session == null) return;
-                        var messagesVm = new Skat.KawkaProject.Features.Messages.ViewModels.MessagesViewModel(
-                            shell, _session, messageService, topicService)
-                        {
-                            TopicName = topicName,
-                            Partition = partition,
-                            Mode = Skat.KawkaProject.Features.Messages.ViewModels.MessageMode.Offset,
-                        };
-                        shell.Router.Navigate.Execute(messagesVm);
-                        _ = messagesVm.FetchMessagesAsync();
-                    }));
+                    shell, _session, topicService, ShowPartitionMessages));
         });
+
+        void ShowPartitionMessages(string topicName, int partitionId)
+        {
+            // Deferred null-check, NOT a copy of the one guarding NavigateToTopicsCommand above:
+            // this runs when the user clicks a partition's eye icon, which may be minutes later -
+            // long enough for DisconnectCommand to have nulled _session out from under this lambda.
+            if (_session == null) return;
+            shell.Router.Navigate.Execute(
+                Skat.KawkaProject.Features.Messages.ViewModels.MessagesViewModel.ForPartition(
+                    shell, _session, messageService, topicService, topicName, partitionId));
+        }
 
         NavigateToMessagesCommand = ReactiveCommand.Create(() =>
         {

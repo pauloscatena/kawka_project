@@ -55,6 +55,43 @@ public class MessagesViewModelTests
     }
 
     [Fact]
+    public async Task ForPartition_points_the_view_model_at_one_partition_and_starts_fetching()
+    {
+        var svc = new Mock<IMessageService>();
+        var fetched = new TaskCompletionSource<IEnumerable<KafkaMessage>>();
+        svc.Setup(s => s.FetchMessagesAsync(It.IsAny<IKafkaSession>(), "orders", 3, It.IsAny<long>(), It.IsAny<int>()))
+           .Returns(fetched.Task);
+
+        var vm = MessagesViewModel.ForPartition(
+            FakeScreen(), FakeSession(), svc.Object, new Mock<ITopicService>().Object,
+            topicName: "orders", partitionId: 3);
+
+        // The factory owns the whole init protocol - the previous callers had to remember all four
+        // steps (topic, partition, offset mode, fetch) at every call site.
+        Assert.Equal("orders", vm.TopicName);
+        Assert.Equal(3, vm.Partition);
+        Assert.Equal(MessageMode.Offset, vm.Mode);
+
+        // And it started the fetch: the service was asked for this partition's messages.
+        svc.Verify(s => s.FetchMessagesAsync(It.IsAny<IKafkaSession>(), "orders", 3, It.IsAny<long>(), It.IsAny<int>()),
+            Times.Once);
+
+        fetched.SetResult(Array.Empty<KafkaMessage>());
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    [InlineData(null)]
+    public void ForPartition_refuses_an_empty_topic_name(string? topicName)
+    {
+        // ThrowsAny: null yields ArgumentNullException, empty/whitespace yields ArgumentException.
+        Assert.ThrowsAny<ArgumentException>(() => MessagesViewModel.ForPartition(
+            FakeScreen(), FakeSession(), new Mock<IMessageService>().Object, new Mock<ITopicService>().Object,
+            topicName!, partitionId: 0));
+    }
+
+    [Fact]
     public void PauseTail_stops_adding_messages_without_unsubscribing()
     {
         var subject = new Subject<KafkaMessage>();
