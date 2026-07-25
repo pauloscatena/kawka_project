@@ -695,4 +695,36 @@ public class TopicsViewModelTests
             It.IsAny<IKafkaSession>(), It.IsAny<string>(), It.IsAny<int>()), Times.Never);
         Assert.NotNull(vm.ErrorMessage);
     }
+
+    [Fact]
+    public async Task A_pre_delete_argument_error_from_the_service_is_shown_without_dotnet_jargon()
+    {
+        // The VM's own range check passes against a stale detail (the panel still shows 4
+        // partitions), the service re-reads the live topic and refuses. That refusal is an
+        // ArgumentOutOfRangeException, whose Message carries framework tails the user should
+        // never read in a banner the rest of the app writes by hand.
+        var svc = new Mock<ITopicService>();
+        svc.Setup(s => s.ListTopicsAsync(It.IsAny<IKafkaSession>()))
+           .ReturnsAsync(new[] { new TopicInfo("orders", 4, 1) });
+        svc.Setup(s => s.GetTopicDetailAsync(It.IsAny<IKafkaSession>(), "orders"))
+           .ReturnsAsync(new TopicDetail(new TopicInfo("orders", 4, 1),
+               new List<PartitionInfo> { new(0, 1, 0, 0), new(1, 1, 0, 0), new(2, 1, 0, 0), new(3, 1, 0, 0) }));
+        svc.Setup(s => s.DeleteAndRecreateTopicAsync(It.IsAny<IKafkaSession>(), "orders", 2))
+           .ThrowsAsync(new ArgumentOutOfRangeException("newPartitionCount", 2,
+               "Must be between 1 and 1: topic 'orders' currently has 2 partitions, and this operation only reduces the partition count."));
+
+        var vm = new TopicsViewModel(FakeScreen(), FakeSession(), svc.Object, NoOpNavigate);
+        await vm.LoadTopicsAsync();
+        vm.SelectedTopic = vm.Topics[0];
+        vm.ShowRecreateFormCommand.Execute(null);
+        vm.RecreateConfirmName = "orders";
+        vm.RecreatePartitionCount = 2;
+
+        await vm.RecreateTopicAsync();
+
+        Assert.Contains("Must be between 1 and 1", vm.ErrorMessage);
+        Assert.DoesNotContain("Parameter", vm.ErrorMessage);
+        Assert.DoesNotContain("Actual value was", vm.ErrorMessage);
+        Assert.DoesNotContain("DATA LOSS RISK", vm.ErrorMessage);   // nothing was deleted
+    }
 }

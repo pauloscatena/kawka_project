@@ -221,6 +221,19 @@ public class TopicsViewModel : ReactiveObject, IRoutableViewModel
             // A refused delete is different: nothing happened, and retrying is reasonable.
             if (ex.TopicMayBeDeleted) ActiveForm = TopicsFormMode.None;
         }
+        catch (ArgumentException ex)
+        {
+            // Reached when the VM's range check passed against a stale detail and the service
+            // refused after re-reading the live topic. Nothing was deleted: this is a refusal,
+            // not a failure mid-saga, so no DATA LOSS RISK prefix.
+            //
+            // ArgumentException.Message appends "(Parameter 'x')" to the sentence, and
+            // ArgumentOutOfRangeException adds "Actual value was N." on a following line. Both are
+            // framework tails; the sentence the service wrote is what belongs in the banner.
+            var firstLine = ex.Message.Split('\n')[0];
+            var paren = firstLine.LastIndexOf(" (Parameter", StringComparison.Ordinal);
+            ErrorMessage = (paren >= 0 ? firstLine[..paren] : firstLine).Trim();
+        }
         catch (Exception ex)
         {
             ErrorMessage = ex.Message;

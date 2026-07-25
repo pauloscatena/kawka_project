@@ -73,7 +73,7 @@ A VM deriva o RF de `SelectedTopicDetail.Topic.ReplicationFactor` (snapshot stal
 - Consumes: `TopicRecreateAttempt(string TopicName, int OriginalPartitionCount, int RequestedPartitionCount, short ReplicationFactor, IReadOnlyDictionary<string,string> PreservedConfig)` (inalterado — o RF ainda viaja na exceção para reconstrução manual).
 - Produces: `Task DeleteAndRecreateTopicAsync(IKafkaSession session, string topicName, int newPartitionCount)` — SEM `replicationFactor`. A saga deriva o RF da metadata ao vivo.
 
-- [ ] **Step 1: Tornar `ReplicationFactorOf` acessível à saga sem re-acoplar**
+- [x] **Step 1: Tornar `ReplicationFactorOf` acessível à saga sem re-acoplar**
 
 `ReplicationFactorOf` está `internal static` em `TopicService` (`TopicService.cs:17`). A saga (`TopicRecreateOperation`) precisa dela, mas não pode depender de `TopicService`. Mover para um tipo neutro do assembly. Adicionar ao novo/existente helper — criar `Skat.KawkaProject.Kafka/TopicMetadataFacts.cs`:
 
@@ -101,7 +101,7 @@ Em `TopicService.cs`, remover o método `ReplicationFactorOf` (linhas 17-25) e t
 Run: `dotnet build && dotnet test Skat.KawkaProject.Kafka.Tests --filter "FullyQualifiedName~ReplicationFactor"`
 Expected: PASS — movimentação pura, mesmos valores.
 
-- [ ] **Step 2: Escrever o teste de integração que falha**
+- [x] **Step 2: Escrever o teste de integração que falha**
 
 Adicionar a `Skat.KawkaProject.Kafka.Tests/TopicServiceIntegrationTests.cs`. O teste cria um tópico com RF 1, e verifica que o recreate preserva o RF ao vivo — mesmo que a assinatura não receba mais RF do caller:
 
@@ -125,7 +125,7 @@ Adicionar a `Skat.KawkaProject.Kafka.Tests/TopicServiceIntegrationTests.cs`. O t
 Run: `dotnet build`
 Expected: FALHA DE COMPILAÇÃO — `DeleteAndRecreateTopicAsync` ainda exige 4 argumentos. Esperado; a assinatura muda no Step 3.
 
-- [ ] **Step 3: Remover o parâmetro do contrato e derivar o RF na saga**
+- [x] **Step 3: Remover o parâmetro do contrato e derivar o RF na saga**
 
 Em `Skat.KawkaProject.Core/Interfaces/ITopicService.cs`, trocar a assinatura (linha 40) para:
 
@@ -193,31 +193,31 @@ Em `TopicService.cs`, o `DeleteAndRecreateTopicAsync` (linha 128) perde o parâm
     }
 ```
 
-- [ ] **Step 4: Atualizar a VM para não passar RF stale**
+- [x] **Step 4: Atualizar a VM para não passar RF stale**
 
 Em `Skat.KawkaProject.Features.Topics/ViewModels/TopicsViewModel.cs`, no `RecreateTopicAsync`:
 - remover a linha `var replicationFactor = SelectedTopicDetail.Topic.ReplicationFactor;` (`:200`);
 - trocar a chamada por `await _topicService.DeleteAndRecreateTopicAsync(_session, topicName, requestedCount);`.
 
-- [ ] **Step 5: Atualizar todos os mocks/testes que referenciam a assinatura antiga**
+- [x] **Step 5: Atualizar todos os mocks/testes que referenciam a assinatura antiga**
 
 Run: `dotnet build 2>&1 | grep -E "error CS"`
 Expected: lista dos call sites de teste com 4 args. Em `TopicsViewModelTests.cs` e `TopicServiceIntegrationTests.cs`, remover o quarto argumento (`(short)N`) de cada `Setup`/`Verify`/chamada de `DeleteAndRecreateTopicAsync`. Corrigir até o build limpar.
 
-- [ ] **Step 6: Rodar os testes**
+- [x] **Step 6: Rodar os testes**
 
 Run: `dotnet test Skat.KawkaProject.Kafka.Tests --filter "FullyQualifiedName~DeleteAndRecreate" && dotnet test Skat.KawkaProject.Features.Tests`
 Expected: PASS, incluindo `..._derives_replication_factor_from_the_live_topic`.
 
-- [ ] **Step 7: Verificar por mutação que o teste pega o bug**
+- [x] **Step 7: Verificar por mutação que o teste pega o bug**
 
 Mutar `GetTopicFactsAsync` para devolver um RF fixo errado (ex.: `return (topic.Partitions.Count, (short)9);`), rodar `..._derives_replication_factor_from_the_live_topic`. Expected: FALHA (RF esperado 1, obtido 9). Reverter.
 
-- [ ] **Step 8: Atualizar o plano irmão da TUI**
+- [x] **Step 8: Atualizar o plano irmão da TUI**
 
 Em `docs/superpowers/plans/2026-07-24-tui-headless.md`, na Fase 4 (`RecreateCommand`): a chamada `DeleteAndRecreateTopicAsync(session, topicName, target.Value, replicationFactor)` e o mock `(..., "orders", 2, (short)3)` perdem o quarto argumento. Ajustar o texto do plano e a nota de pré-requisito para a assinatura de 3 parâmetros.
 
-- [ ] **Step 9: Rodar a suíte completa e commitar**
+- [x] **Step 9: Rodar a suíte completa e commitar**
 
 Run: `dotnet build && dotnet test`
 Expected: PASS.
@@ -241,7 +241,7 @@ Quando a guarda de faixa da VM passa (contagem stale) mas a do serviço reprova,
 - Consumes: `DeleteAndRecreateTopicAsync(session, topicName, newPartitionCount)` (pós-Task 1); lança `ArgumentOutOfRangeException` / `InvalidOperationException` pré-delete, `TopicRecreateFailedException` pós-delete.
 - Produces: nenhum tipo novo — só o tratamento no `catch`.
 
-- [ ] **Step 1: Escrever o teste que falha**
+- [x] **Step 1: Escrever o teste que falha**
 
 Adicionar a `TopicsViewModelTests.cs`. Cenário: contagem stale na VM (o painel diz 4 partições) mas o serviço reprova com `ArgumentOutOfRangeException` (como se o tópico tivesse encolhido para 2 no cluster). O banner NÃO deve conter jargão do .NET:
 
@@ -278,7 +278,7 @@ Adicionar a `TopicsViewModelTests.cs`. Cenário: contagem stale na VM (o painel 
 Run: `dotnet test Skat.KawkaProject.Features.Tests --filter "FullyQualifiedName~without_dotnet_jargon"`
 Expected: FALHA — hoje o `ex.Message` cru contém "(Parameter 'newPartitionCount')" e "Actual value was 2.".
 
-- [ ] **Step 2: Tratar `ArgumentOutOfRangeException` no catch**
+- [x] **Step 2: Tratar `ArgumentOutOfRangeException` no catch**
 
 Em `TopicsViewModelTests.cs` (na verdade `TopicsViewModel.cs`), no `RecreateTopicAsync`, adicionar um catch específico ANTES do `catch (Exception)` genérico, usando `ex.Message` sem o rabo que o .NET anexa. `ArgumentOutOfRangeException.Message` concatena a mensagem base + "(Parameter ...)" + "Actual value was ...". O texto limpo é a propriedade... na verdade não há propriedade só-mensagem; a convenção é usar a primeira linha. Adicionar helper:
 
@@ -307,16 +307,16 @@ Colocar esse catch entre o `catch (TopicRecreateFailedException ex)` e o `catch 
 
 Use esta segunda forma — remove tanto o "(Parameter...)" da primeira linha quanto o "Actual value was" da segunda.
 
-- [ ] **Step 3: Rodar o teste**
+- [x] **Step 3: Rodar o teste**
 
 Run: `dotnet test Skat.KawkaProject.Features.Tests --filter "FullyQualifiedName~without_dotnet_jargon"`
 Expected: PASS.
 
-- [ ] **Step 4: Verificar por mutação**
+- [x] **Step 4: Verificar por mutação**
 
 Remover o `catch (ArgumentException ...)` (deixando cair no genérico). Rodar o teste. Expected: FALHA (jargão volta). Reverter.
 
-- [ ] **Step 5: Rodar a suíte e commitar**
+- [x] **Step 5: Rodar a suíte e commitar**
 
 Run: `dotnet test Skat.KawkaProject.Features.Tests`
 Expected: PASS.
