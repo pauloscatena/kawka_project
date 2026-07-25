@@ -736,10 +736,16 @@ public class TopicsViewModelTests
         // drifted into three lists that could disagree about what a recreate destroys.
         var vm = new TopicsViewModel(FakeScreen(), FakeSession(), Mock.Of<ITopicService>(), NoOpNavigate);
 
-        foreach (var loss in DestructiveAction.RecreateLoses)
+        // Every consequence except the message loss, which the red headline above the panel states
+        // instead - see the comment on RecreateWhatIsLost.
+        foreach (var loss in DestructiveAction.RecreateLoses.Where(l => l != DestructiveAction.LostMessages))
             Assert.Contains(loss, vm.RecreateWhatIsLost);
         foreach (var kept in DestructiveAction.RecreatePreserves)
             Assert.Contains(kept, vm.RecreateWhatIsPreserved);
+
+        // The user is told which setting decides between skipping and replaying, not just that one
+        // of the two will happen.
+        Assert.Contains("auto.offset.reset", vm.RecreateWhatIsLost);
 
         // The halves must not be swapped: config overrides survive, messages do not.
         Assert.DoesNotContain("config", vm.RecreateWhatIsLost, StringComparison.OrdinalIgnoreCase);

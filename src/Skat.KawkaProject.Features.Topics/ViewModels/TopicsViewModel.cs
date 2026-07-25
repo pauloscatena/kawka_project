@@ -83,7 +83,13 @@ public class TopicsViewModel : ReactiveObject, IRoutableViewModel
     // halves are shown: losses alone would send the user to re-apply config the saga carries over.
     // These are constants of the operation, not of the selected topic - the wording never names it -
     // so they need no change notification.
-    public string RecreateWhatIsLost => $"Not carried over: {string.Join("; ", DestructiveAction.RecreateLoses)}.";
+    //
+    // LostMessages is filtered out because the red headline right above this line already states it,
+    // and repeating it in body text right below dilutes the one sentence meant to stop the user.
+    // Filtered by identity rather than by position so adding a consequence to the canonical list
+    // still surfaces here. Frontends without their own headline (the TUI) use the full list.
+    public string RecreateWhatIsLost =>
+        $"Also not carried over: {string.Join("; ", DestructiveAction.RecreateLoses.Where(l => l != DestructiveAction.LostMessages))}.";
     public string RecreateWhatIsPreserved => $"Preserved: {string.Join("; ", DestructiveAction.RecreatePreserves)}.";
 
     public Interaction<string, bool> ConfirmDelete { get; } = new();
