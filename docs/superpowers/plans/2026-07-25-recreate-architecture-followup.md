@@ -550,8 +550,8 @@ git commit -m "refactor(kafka): dedup MetadataQueryTimeout into a shared interna
 
 ## Verificação final
 
-- [ ] `dotnet build` → `0 Error(s)`
-- [ ] `dotnet test` → todos verdes, com Docker rodando para os de integração
-- [ ] Grafo de referências inalterado: `Core` ainda não referencia ninguém; `TopicRecreateOperation` não referencia `TopicService` nem vice-versa (`grep` do Task 5, Step 2)
-- [ ] Os dois planos/specs da TUI (`2026-07-24-tui-headless.md`, `2026-07-24-tui-headless-design.md`) refletem a assinatura de 3 parâmetros de `DeleteAndRecreateTopicAsync` (Task 1) e o `DestructiveAction` do Core (Task 4)
+- [x] `dotnet build` → `0 Error(s)`
+- [x] `dotnet test` → todos verdes, com Docker rodando para os de integração
+- [x] Grafo de referências inalterado: `Core` ainda não referencia ninguém; `TopicRecreateOperation` não referencia `TopicService` nem vice-versa (`grep` do Task 5, Step 2)
+- [x] Os dois planos/specs da TUI (`2026-07-24-tui-headless.md`, `2026-07-24-tui-headless-design.md`) refletem a assinatura de 3 parâmetros de `DeleteAndRecreateTopicAsync` (Task 1) e o `DestructiveAction` do Core (Task 4)
 - [ ] Rodar `/powerpuff-review` sobre o diff deste plano, como fechamento — os cinco achados eram da revisão anterior; confirmar que as correções não introduziram novos
