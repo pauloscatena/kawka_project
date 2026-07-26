@@ -55,10 +55,22 @@ using var cts = new CancellationTokenSource();
 
 // Ctrl+C during a command cancels just that command and returns the prompt; Ctrl+C at an idle
 // prompt exits. Matches the Claude Code behaviour the layout is modelled on.
+//
+// The idle branch deliberately does NOT set e.Cancel. Setting it tells the runtime "I handled
+// this, keep running", and the only thing the handler could do instead was signal a token - which
+// Console.ReadLine does not observe, because it is blocked in a native read. The process stayed
+// alive at the prompt, ignoring Ctrl+C entirely. Leaving e.Cancel false lets the runtime terminate,
+// which is what the user asked for; the session is disposed here first, since termination will not
+// run the using blocks below.
 Console.CancelKeyPress += (_, e) =>
 {
-    e.Cancel = true;
-    if (!host.CancelRunningCommand()) cts.Cancel();
+    if (host.CancelRunningCommand())
+    {
+        e.Cancel = true;
+        return;
+    }
+
+    host.Dispose();
 };
 
 if (oneShot)

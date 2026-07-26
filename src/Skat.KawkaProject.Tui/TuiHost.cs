@@ -25,6 +25,7 @@ public sealed class TuiHost(
 {
     private IKafkaSession? _session;
     private CancellationTokenSource? _runningCommand;
+    private bool _disposed;
 
     public async Task<int> RunOnceAsync(ParsedCommand parsed, CancellationToken ct)
     {
@@ -72,13 +73,23 @@ public sealed class TuiHost(
         {
             var line = input.ReadLine("> ");
             if (line is null) break;                                  // EOF (Ctrl+D)
-            if (line.Trim() is "exit" or "quit") break;
+
+            // Case-insensitive like every other verb: EXIT resolving to "unknown command" while
+            // TOPICS works is the kind of inconsistency nobody can guess from the outside.
+            var trimmed = line.Trim();
+            if (trimmed.Equals("exit", StringComparison.OrdinalIgnoreCase)
+                || trimmed.Equals("quit", StringComparison.OrdinalIgnoreCase)) break;
 
             var parsed = ArgumentParser.ParseLine(line);
 
             // A fresh token per command, linked to the global one: Ctrl+C during a command
             // cancels only that command and the loop keeps going. A failed or cancelled
             // command never kills the REPL.
+            //
+            // Honest limitation: no ITopicService / IKafkaConnectionFactory method accepts a
+            // CancellationToken today, so cancelling marks the token but cannot interrupt a call
+            // already inside librdkafka - the command finishes on its own timeout, and only then
+            // does the cancellation register. Ctrl+C is not yet an escape from a hung broker call.
             using var commandCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
             _runningCommand = commandCts;
             try
@@ -120,5 +131,18 @@ public sealed class TuiHost(
         }
     }
 
-    public void Dispose() => _session?.Dispose();
+    /// <remarks>
+    /// Idempotent because it is called from more than one place: the Ctrl+C handler disposes before
+    /// the runtime terminates, and the composition root disposes both the captured host and, via the
+    /// provider, the same singleton. Harmless while KafkaSession.Dispose is a no-op, and a
+    /// double-free the day it stops being one.
+    /// </remarks>
+    public void Dispose()
+    {
+        if (_disposed) return;
+        _disposed = true;
+
+        _session?.Dispose();
+        _session = null;
+    }
 }

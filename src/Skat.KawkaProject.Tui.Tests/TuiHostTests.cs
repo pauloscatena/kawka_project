@@ -166,6 +166,36 @@ public class TuiHostTests
         session.Verify(s => s.Dispose(), Times.Once);
     }
 
+    [Theory]
+    [InlineData("EXIT")]
+    [InlineData("Quit")]
+    [InlineData("  exit  ")]
+    public async Task Exit_is_recognised_regardless_of_case_or_spacing(string line)
+    {
+        // Every verb resolves case-insensitively. EXIT answering "unknown command" while TOPICS
+        // works is an inconsistency nobody can guess from the outside.
+        var (host, output) = HostWith(new ScriptedReader(line), new StatusCommand());
+
+        await host.RunReplAsync(CancellationToken.None);
+
+        Assert.DoesNotContain("Unknown command", output.ToString());
+    }
+
+    [Fact]
+    public async Task Disposing_twice_disposes_the_session_once()
+    {
+        // Called from the Ctrl+C handler and again by the composition root, which disposes both the
+        // captured host and the same singleton through the provider.
+        var (connect, session) = ConnectYielding("prod");
+        var (host, _) = HostWith(new ScriptedReader("connect prod", "exit"), connect);
+
+        await host.RunReplAsync(CancellationToken.None);
+        host.Dispose();
+        host.Dispose();
+
+        session.Verify(s => s.Dispose(), Times.Once);
+    }
+
     [Fact]
     public async Task One_shot_returns_the_commands_exit_code()
     {

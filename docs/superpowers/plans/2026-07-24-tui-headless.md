@@ -16,7 +16,7 @@
 - `Skat.KawkaProject.Tui` referencia **somente** `Skat.KawkaProject.Core` e `Skat.KawkaProject.Kafka`. Nunca `Features.*` nem `UI`.
 - Nenhum projeto existente ganha referência nova. `Spectre.Console` só entra no projeto TUI e no seu projeto de testes.
 - Composição por `Microsoft.Extensions.DependencyInjection`, espelhando `Skat.KawkaProject.UI/App.axaml.cs:32-39`: `IConnectionProfileRepository` e `IKafkaConnectionFactory` como singleton, `ITopicService`/`IMessageService`/`IClusterService` como transient.
-- Nenhuma classe fora de `Rendering/`, `Input/` e `Safety/` pode referenciar `System.Console` ou `AnsiConsole`. Comandos devolvem `CommandResult`.
+- Nenhuma classe fora de `Rendering/`, `Input/` e `Safety/` pode referenciar `System.Console` ou `AnsiConsole`. Comandos devolvem `CommandResult`. **Exceção declarada:** `Program.cs`, o composition root — ele decide TTY e monta os writers antes de qualquer outra coisa existir, e registra o handler de Ctrl+C. Confirmado no gate da Task 6 como exceção legítima, não violação.
 - Todos os comandos rodados a partir de `/mnt/d/dev/Skat/kawka_project/src`.
 - **Sequenciamento:** as Fases 1-3 não têm dependência externa. A **Fase 4 exige que as Tasks 1-4 e a Task 9 do plano `2026-07-24-topic-recreate-hardening.md` estejam concluídas.** Tasks 1-4 entregam a validação no serviço e a `TopicRecreateFailedException`; a Task 9 entrega os renames (`DeleteAndRecreateTopicAsync`, `GetTopicConfigOverridesAsync`) que o código da Fase 4 chama pelo nome. Na prática, concluir as Fases 1-3 do plano de hardening cobre tudo isso. Não comece a Fase 4 antes.
 
@@ -1536,6 +1536,14 @@ git commit -m "feat(tui): add help command, REPL host and one-shot entry point"
 ```
 
 ---
+
+> **Dívida aberta pelo gate da Task 6, a considerar antes de construir em cima:** o Ctrl+C do prompt
+> ocioso funciona (verificado em pty real), mas **cancelar um comando em andamento não interrompe a
+> chamada de rede**. Nenhum método de `ITopicService`/`IKafkaConnectionFactory`/`IMessageService`
+> aceita `CancellationToken`, então o token é marcado e ignorado até o librdkafka estourar o próprio
+> timeout. A Fase 2 constrói a caixa de prompt sobre esse mesmo mecanismo — se quisermos que Ctrl+C
+> seja saída de um broker travado, o token precisa descer até o `Core`, o que é mudança de contrato
+> fora do escopo desta TUI.
 
 # FASE 2 — Caixa de prompt
 
