@@ -136,6 +136,55 @@ public class PromptReaderTests
     }
 
     [Fact]
+    public void Backspace_deletes_a_whole_emoji_not_half_of_one()
+    {
+        // A StringBuilder counts UTF-16 code units, so one Backspace over an astral character left
+        // a lone surrogate behind: a broken glyph on screen, and an unencodable string that took
+        // the whole history file down with it on the way out.
+        var line = Reader(new LineHistory(),
+            Ch('a'), Ch('\uD83D'), Ch('\uDE00'), Key(ConsoleKey.Backspace), Key(ConsoleKey.Enter)).ReadLine("> ");
+
+        Assert.Equal("a", line);
+    }
+
+    [Fact]
+    public void Backspace_deletes_a_combining_pair_as_typed()
+    {
+        // A precomposed accent is a single char and must not be treated as a surrogate pair.
+        var line = Reader(new LineHistory(),
+            Ch('ç'), Ch('ã'), Key(ConsoleKey.Backspace), Key(ConsoleKey.Enter)).ReadLine("> ");
+
+        Assert.Equal("ç", line);
+    }
+
+    [Fact]
+    public void A_line_longer_than_the_terminal_is_never_drawn_wider_than_it()
+    {
+        // Drawing past the edge makes the terminal wrap, and a cursor move left cannot climb back
+        // to the previous row - so the overflowed text stays on screen forever.
+        var sink = new StringWriter();
+        var console = AnsiConsole.Create(new AnsiConsoleSettings
+        {
+            Ansi = AnsiSupport.Yes,
+            ColorSystem = ColorSystemSupport.NoColors,
+            Out = new AnsiConsoleOutput(sink)
+        });
+        console.Profile.Width = 20;
+
+        var typed = Enumerable.Repeat(Ch('x'), 60).Append(Key(ConsoleKey.Enter)).ToArray();
+        var line = new PromptReader(new ScriptedKeys(typed), new LineHistory(), console).ReadLine("> ");
+
+        Assert.Equal(new string('x', 60), line);   // the buffer keeps everything
+
+        // but no single painted run exceeds the terminal width
+        var longestRun = sink.ToString()
+            .Split('')
+            .Select(s => new string(s.SkipWhile(c => c != 'D' && c != 'C' && c != 'm').Skip(1).ToArray()))
+            .Max(s => s.Length);
+        Assert.True(longestRun <= 20, $"painted {longestRun} columns into a 20-column terminal");
+    }
+
+    [Fact]
     public void The_prompt_is_redrawn_in_place_rather_than_stacked()
     {
         // Every keystroke redraws. Writing a fresh block each time would leave one copy of the

@@ -14,6 +14,9 @@ public sealed class LineHistory
     /// <summary>Kept bounded so a long-lived history file cannot grow forever.</summary>
     private const int MaxPersistedEntries = 500;
 
+    /// <summary>UTF-8 that replaces what it cannot encode rather than throwing.</summary>
+    private static readonly System.Text.UTF8Encoding ForgivingUtf8 = new(encoderShouldEmitUTF8Identifier: false);
+
     private readonly List<string> _entries = new();
     private int _cursor;                     // _entries.Count means "past the newest" (empty line)
 
@@ -95,7 +98,11 @@ public sealed class LineHistory
         {
             var dir = Path.GetDirectoryName(path);
             if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
-            File.WriteAllLines(path, _entries.TakeLast(MaxPersistedEntries));
+
+            // An encoding that substitutes instead of throwing. The default writer throws on a lone
+            // surrogate, and because this writes in a single pass, one unencodable entry destroyed
+            // every good one and killed the process on the way out of an otherwise fine session.
+            File.WriteAllLines(path, _entries.TakeLast(MaxPersistedEntries), ForgivingUtf8);
             return true;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)

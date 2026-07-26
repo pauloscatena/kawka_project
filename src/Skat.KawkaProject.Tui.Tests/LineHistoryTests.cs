@@ -174,6 +174,30 @@ public class LineHistoryTests
         finally { File.Delete(path); }
     }
 
+    [Fact]
+    public void Saving_a_line_with_a_broken_character_does_not_take_the_history_with_it()
+    {
+        // A lone surrogate cannot be encoded. The default writer throws on it, which killed the
+        // process on the way out AND left the file empty - one bad entry costing every good one,
+        // because WriteAllLines writes in a single pass.
+        var path = Path.Combine(Path.GetTempPath(), $"kawka-hist-bad-{Guid.NewGuid():N}");
+        try
+        {
+            var h = new LineHistory();
+            h.Add("topics");
+            h.Add("orders \uD83D");        // high surrogate with nothing after it
+            h.Add("brokers");
+
+            var ex = Record.Exception(() => h.Save(path));
+
+            Assert.Null(ex);
+            var saved = File.ReadAllLines(path);
+            Assert.Contains("topics", saved);
+            Assert.Contains("brokers", saved);
+        }
+        finally { File.Delete(path); }
+    }
+
     private static bool CanStillRead(string path)
     {
         try { File.ReadAllLines(path); return true; }

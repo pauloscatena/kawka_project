@@ -53,7 +53,14 @@ public sealed class PromptReader(IKeySource keys, LineHistory history, IAnsiCons
                 }
 
                 case ConsoleKey.Backspace:
-                    if (buffer.Length > 0) buffer.Length--;
+                    // By code point, not code unit: an astral character (most emoji) is a surrogate
+                    // pair, and dropping one half leaves a broken glyph on screen and a string that
+                    // cannot be encoded - which used to take the history file down on the way out.
+                    if (buffer.Length > 0)
+                    {
+                        var removed = char.IsLowSurrogate(buffer[^1]) && buffer.Length > 1 ? 2 : 1;
+                        buffer.Length -= removed;
+                    }
                     break;
 
                 case ConsoleKey.UpArrow:
@@ -84,7 +91,7 @@ public sealed class PromptReader(IKeySource keys, LineHistory history, IAnsiCons
     {
         // Cursor movement rather than a carriage return: Spectre normalises '\r' into a line break,
         // so the CR version scrolled a fresh copy of the prompt for every keystroke.
-        var line = prompt + current;
+        var line = Window(prompt + current);
 
         if (_lastDrawnLength > 0) console.Cursor.MoveLeft(_lastDrawnLength);
 
@@ -95,6 +102,22 @@ public sealed class PromptReader(IKeySource keys, LineHistory history, IAnsiCons
         if (overhang > 0) console.Cursor.MoveLeft(overhang);
 
         _lastDrawnLength = line.Length;
+    }
+
+    /// <summary>
+    /// The tail of the line that fits on one terminal row.
+    /// </summary>
+    /// <remarks>
+    /// Never draw wider than the terminal. Once the text wraps, the cursor is on a new row and
+    /// MoveLeft cannot climb back to the previous one - so the overflow stays on screen for the rest
+    /// of the session, which is the smearing this redraw exists to avoid. Showing the end of a long
+    /// line is also what the user is looking at while typing it. One column is left spare because a
+    /// character written into the last cell leaves some terminals in a pending-wrap state.
+    /// </remarks>
+    private string Window(string line)
+    {
+        var room = Math.Max(1, console.Profile.Width - 1);
+        return line.Length <= room ? line : line[^room..];
     }
 
     private int _lastDrawnLength;
