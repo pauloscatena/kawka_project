@@ -2589,7 +2589,7 @@ git commit -m "feat(tui): add interactive and non-interactive destructive-action
 - Consumes: `ITopicService.CreateTopicAsync`, `DeleteTopicAsync`, `ExpandPartitionsAsync`, `DeleteAndRecreateTopicAsync` (nome pós-hardening Task 9); `TopicRecreateFailedException` (hardening Task 4); `IConfirmer` (Task 11).
 - Produces: `CreateCommand`, `DeleteCommand`, `IncreaseCommand`, `RecreateCommand`.
 
-- [ ] **Step 1: Escrever os testes que falham**
+- [x] **Step 1: Escrever os testes que falham**
 
 Criar `Skat.KawkaProject.Tui.Tests/TopicAdminCommandsTests.cs`:
 
@@ -2703,12 +2703,12 @@ public class TopicAdminCommandsTests
 }
 ```
 
-- [ ] **Step 2: Rodar os testes para confirmar que falham**
+- [x] **Step 2: Rodar os testes para confirmar que falham**
 
 Run: `dotnet test Skat.KawkaProject.Tui.Tests --filter "FullyQualifiedName~TopicAdminCommandsTests"`
 Expected: FAIL com erro de compilação.
 
-- [ ] **Step 3: Implementar**
+- [x] **Step 3: Implementar**
 
 Criar `Skat.KawkaProject.Tui/Commands/TopicAdminCommands.cs`:
 
@@ -2865,12 +2865,12 @@ services.AddSingleton<ITuiCommand, IncreaseCommand>();
 services.AddSingleton<ITuiCommand, RecreateCommand>();
 ```
 
-- [ ] **Step 4: Rodar a suíte completa**
+- [x] **Step 4: Rodar a suíte completa**
 
 Run: `dotnet build && dotnet test`
 Expected: PASS, incluindo as suítes existentes de `Features.Tests`, `Kafka.Tests` e `Core.Tests`.
 
-- [ ] **Step 5: Verificar a recusa não-interativa de verdade**
+- [x] **Step 5: Verificar a recusa não-interativa de verdade**
 
 ```bash
 cd /mnt/d/dev/Skat/kawka_project/src
@@ -2878,7 +2878,7 @@ dotnet run --project Skat.KawkaProject.Tui -- delete some-topic --profile local;
 ```
 Expected: recusa, mensagem citando `--yes-i-know-this-deletes-data`, `exit=3`. **Se isto retornar 0 ou deletar o tópico, pare e corrija antes de commitar** — é a garantia central desta fase.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add Skat.KawkaProject.Tui Skat.KawkaProject.Tui.Tests/TopicAdminCommandsTests.cs

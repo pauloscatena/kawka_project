@@ -47,4 +47,22 @@ public sealed record DestructiveAction(
     /// warning panel) can read the lists directly instead of naming a topic.</summary>
     public static DestructiveAction Recreate(string topicName) =>
         new(topicName, "recreate", RecreateLoses, RecreatePreserves);
+
+    /// <summary>What deleting a topic destroys. Nothing survives, because the topic does not.</summary>
+    /// <remarks>
+    /// Deliberately not the recreate list. A recreate puts the topic back, so "consumers may skip
+    /// or replay" describes what happens next; a delete leaves nothing to consume, and offsets for
+    /// a topic that no longer exists are simply gone. ACLs are excluded for the same reason as in
+    /// Recreate: literal ACLs on the name survive, so listing them would send someone to re-grant
+    /// permissions that were never revoked.
+    /// </remarks>
+    public static IReadOnlyList<string> DeleteLoses { get; } = Array.AsReadOnly(new[]
+    {
+        LostMessages,
+        "committed consumer group offsets for the topic"
+    });
+
+    /// <summary>The delete of a specific topic.</summary>
+    public static DestructiveAction Delete(string topicName) =>
+        new(topicName, "delete", DeleteLoses, Array.Empty<string>());
 }

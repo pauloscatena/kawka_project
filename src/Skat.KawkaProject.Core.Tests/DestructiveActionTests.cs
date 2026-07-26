@@ -27,6 +27,28 @@ public class DestructiveActionTests
     }
 
     [Fact]
+    public void Delete_says_nothing_survives()
+    {
+        var action = DestructiveAction.Delete("orders");
+
+        Assert.Equal("delete", action.Verb);
+        Assert.Contains(action.WhatIsLost, w => w.Contains("message", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(action.WhatIsLost, w => w.Contains("offset", StringComparison.OrdinalIgnoreCase));
+
+        // A recreate preserves config overrides; a delete has nothing to preserve them on.
+        Assert.Empty(action.WhatIsPreserved);
+    }
+
+    [Fact]
+    public void Delete_does_not_promise_what_only_a_recreate_can_mean()
+    {
+        // The recreate wording explains that consumers may skip or replay, because the topic comes
+        // back. After a delete there is nothing to skip or replay, and saying so would be wrong.
+        Assert.DoesNotContain(DestructiveAction.DeleteLoses,
+            w => w.Contains("auto.offset.reset", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
     public void Recreate_keeps_config_overrides_on_the_preserved_side()
     {
         var action = DestructiveAction.Recreate("orders");
