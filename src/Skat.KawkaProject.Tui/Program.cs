@@ -29,6 +29,9 @@ services.AddSingleton<ITuiCommand, DisconnectCommand>();
 services.AddSingleton<ITuiCommand, StatusCommand>();
 services.AddSingleton<ITuiCommand, TopicsCommand>();
 services.AddSingleton<ITuiCommand, DescribeCommand>();
+services.AddSingleton<ITuiCommand, BrokersCommand>();
+services.AddSingleton<ITuiCommand, GroupsCommand>();
+services.AddSingleton<ITuiCommand, LagCommand>();
 
 // Lazily resolved: help is a command that needs the registry, and the registry needs every
 // command. Deferring the lookup breaks the cycle without leaving help out of its own listing.

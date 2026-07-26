@@ -1980,7 +1980,7 @@ git commit -m "feat(tui): add bordered prompt box with history and inline editin
 - Consumes: `IClusterService.ListBrokersAsync`, `ListConsumerGroupsAsync`, `GetGroupLagAsync`.
 - Produces: `BrokersCommand`, `GroupsCommand`, `LagCommand`.
 
-- [ ] **Step 1: Escrever o teste que falha**
+- [x] **Step 1: Escrever o teste que falha**
 
 Criar `Skat.KawkaProject.Tui.Tests/ClusterCommandsTests.cs`:
 
@@ -2050,12 +2050,12 @@ public class ClusterCommandsTests
 }
 ```
 
-- [ ] **Step 2: Rodar o teste para confirmar que falha**
+- [x] **Step 2: Rodar o teste para confirmar que falha**
 
 Run: `dotnet test Skat.KawkaProject.Tui.Tests --filter "FullyQualifiedName~ClusterCommandsTests"`
 Expected: FAIL com erro de compilação.
 
-- [ ] **Step 3: Implementar**
+- [x] **Step 3: Implementar**
 
 Criar `Skat.KawkaProject.Tui/Commands/ClusterCommands.cs`:
 
@@ -2142,12 +2142,12 @@ services.AddSingleton<ITuiCommand, GroupsCommand>();
 services.AddSingleton<ITuiCommand, LagCommand>();
 ```
 
-- [ ] **Step 4: Rodar os testes**
+- [x] **Step 4: Rodar os testes**
 
 Run: `dotnet build && dotnet test Skat.KawkaProject.Tui.Tests`
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add Skat.KawkaProject.Tui Skat.KawkaProject.Tui.Tests/ClusterCommandsTests.cs
