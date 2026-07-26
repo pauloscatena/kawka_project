@@ -781,7 +781,7 @@ git commit -m "feat(tui): add command contract, registry and single-boundary dis
 - Consumes: `ITuiCommand`, `CommandContext`, `CommandResult` (Task 3); `IConnectionProfileRepository.GetAll()`, `IKafkaConnectionFactory.ConnectAsync(ConnectionProfile)`.
 - Produces: `ProfilesCommand`, `ConnectCommand`, `DisconnectCommand`, `StatusCommand`. `ConnectCommand` expõe `IKafkaSession? Established` para o `TuiHost` capturar a sessão criada.
 
-- [ ] **Step 1: Escrever o teste que falha**
+- [x] **Step 1: Escrever o teste que falha**
 
 Criar `Skat.KawkaProject.Tui.Tests/ConnectionCommandsTests.cs`:
 
@@ -879,12 +879,12 @@ public class ConnectionCommandsTests
 }
 ```
 
-- [ ] **Step 2: Rodar o teste para confirmar que falha**
+- [x] **Step 2: Rodar o teste para confirmar que falha**
 
 Run: `dotnet test Skat.KawkaProject.Tui.Tests --filter "FullyQualifiedName~ConnectionCommandsTests"`
 Expected: FAIL com erro de compilação.
 
-- [ ] **Step 3: Implementar os comandos**
+- [x] **Step 3: Implementar os comandos**
 
 Criar `Skat.KawkaProject.Tui/Commands/ConnectionCommands.cs`:
 
@@ -970,12 +970,12 @@ public sealed class StatusCommand : ITuiCommand
 
 Nota de implementação: `DisconnectCommand` só reporta; quem descarta a sessão é o `TuiHost` (Task 6), porque o ciclo de vida da sessão pertence ao host, não ao comando.
 
-- [ ] **Step 4: Rodar os testes**
+- [x] **Step 4: Rodar os testes**
 
 Run: `dotnet test Skat.KawkaProject.Tui.Tests`
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add Skat.KawkaProject.Tui/Commands/ConnectionCommands.cs Skat.KawkaProject.Tui.Tests/ConnectionCommandsTests.cs
