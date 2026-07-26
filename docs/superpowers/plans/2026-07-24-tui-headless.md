@@ -1622,12 +1622,12 @@ public class LineHistoryTests
 }
 ```
 
-- [ ] **Step 2: Rodar o teste para confirmar que falha**
+- [x] **Step 2: Rodar o teste para confirmar que falha**
 
 Run: `dotnet test Skat.KawkaProject.Tui.Tests --filter "FullyQualifiedName~LineHistoryTests"`
 Expected: FAIL com erro de compilação.
 
-- [ ] **Step 3: Implementar**
+- [x] **Step 3: Implementar**
 
 `Skat.KawkaProject.Tui/Input/IKeySource.cs`:
 
@@ -1700,12 +1700,12 @@ public sealed class LineHistory
 }
 ```
 
-- [ ] **Step 4: Rodar os testes**
+- [x] **Step 4: Rodar os testes**
 
 Run: `dotnet test Skat.KawkaProject.Tui.Tests`
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add Skat.KawkaProject.Tui/Input Skat.KawkaProject.Tui.Tests/LineHistoryTests.cs
