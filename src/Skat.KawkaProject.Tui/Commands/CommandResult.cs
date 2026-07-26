@@ -24,5 +24,26 @@ public abstract record CommandResult
 
     public sealed record Failure(string Message, int ExitCode) : CommandResult;
 
-    public int ExitCodeOrSuccess => this is Failure f ? f.ExitCode : ExitCodes.Success;
+    /// <summary>
+    /// Several results from one command, rendered in order.
+    /// </summary>
+    /// <remarks>
+    /// Exists so a command with two shapes of fact - describe has topic-level values and a table of
+    /// partitions - can return both as data. Without it the only way to carry the second fact was to
+    /// write it into a title, which the plain-text renderer drops by design, so it vanished the
+    /// moment anyone piped the command.
+    /// </remarks>
+    public sealed record Group(IReadOnlyList<CommandResult> Parts) : CommandResult;
+
+    /// <summary>
+    /// The exit code this result implies. A Group takes the first failing part's code: a command
+    /// that produced any failure did not succeed, whatever else it also produced.
+    /// </summary>
+    public int ExitCodeOrSuccess => this switch
+    {
+        Failure f => f.ExitCode,
+        Group g => g.Parts.Select(p => p.ExitCodeOrSuccess)
+                          .FirstOrDefault(code => code != ExitCodes.Success, ExitCodes.Success),
+        _ => ExitCodes.Success
+    };
 }

@@ -43,6 +43,10 @@ public sealed class SpectreRenderer(IAnsiConsole console) : IResultRenderer
             case CommandResult.Failure f:
                 console.MarkupLine($"[red]{Markup.Escape(f.Message)}[/]");
                 break;
+
+            case CommandResult.Group g:
+                foreach (var part in g.Parts) Render(part);
+                break;
         }
     }
 

@@ -33,6 +33,10 @@ public sealed class PlainTextRenderer(TextWriter output, TextWriter error) : IRe
             case CommandResult.Failure f:
                 error.WriteLine(f.Message);
                 break;
+
+            case CommandResult.Group g:
+                foreach (var part in g.Parts) Render(part);
+                break;
         }
     }
 

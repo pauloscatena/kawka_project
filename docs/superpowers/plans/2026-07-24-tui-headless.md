@@ -1008,7 +1008,7 @@ git commit -m "feat(tui): add profiles, connect, disconnect and status commands"
 
 > **Nota:** `GetTopicConfigOverridesAsync` é o nome pós-Task 2 do plano de hardening. Se a Fase 1 da TUI for feita antes daquele rename, use `GetTopicConfigAsync` e ajuste ao renomear.
 
-- [ ] **Step 1: Escrever o teste que falha**
+- [x] **Step 1: Escrever o teste que falha**
 
 Criar `Skat.KawkaProject.Tui.Tests/TopicCommandsTests.cs`:
 
@@ -1097,12 +1097,12 @@ public class TopicCommandsTests
 }
 ```
 
-- [ ] **Step 2: Rodar o teste para confirmar que falha**
+- [x] **Step 2: Rodar o teste para confirmar que falha**
 
 Run: `dotnet test Skat.KawkaProject.Tui.Tests --filter "FullyQualifiedName~TopicCommandsTests"`
 Expected: FAIL com erro de compilação.
 
-- [ ] **Step 3: Implementar os comandos**
+- [x] **Step 3: Implementar os comandos**
 
 Criar `Skat.KawkaProject.Tui/Commands/TopicCommands.cs`:
 
@@ -1180,12 +1180,12 @@ public sealed class DescribeCommand(ITopicService topics) : ITuiCommand
 }
 ```
 
-- [ ] **Step 4: Rodar os testes**
+- [x] **Step 4: Rodar os testes**
 
 Run: `dotnet test Skat.KawkaProject.Tui.Tests`
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add Skat.KawkaProject.Tui/Commands/TopicCommands.cs Skat.KawkaProject.Tui.Tests/TopicCommandsTests.cs
@@ -1200,6 +1200,20 @@ git commit -m "feat(tui): add topics and describe commands"
 > seja, a ordem de inserção do dicionário — que é a ordem de registro no composition root, arbitrária
 > do ponto de vista de quem lê a ajuda (e nem sequer é contrato documentado do `Dictionary`). O
 > `HelpCommand` deve **ordenar explicitamente por `Name`** ao renderizar, em vez de confiar em `All`.
+>
+> **Achados do gate da Task 4, a validar aqui:**
+> 1. **`disconnect` hoje mente.** O comando devolve "Disconnected from 'x'." mas nada encerra a
+>    sessão — quem faz isso é o `HandleDisconnect` desta task. Se ele não for implementado, o
+>    usuário lê "Disconnected" e segue conectado.
+> 2. **Trocar de sessão sem descartar a anterior.** `connect prod` seguido de `connect staging`
+>    deixa a primeira `IKafkaSession` para trás. Hoje isso não vaza recurso — `KafkaSession.Dispose()`
+>    é no-op e nenhum handle nativo é retido, porque `TopicService` e companhia abrem e descartam o
+>    próprio `AdminClient` a cada chamada. Vira leak de verdade no dia em que a sessão passar a
+>    reter um client. `AdoptSessionIfConnected` deve descartar a anterior de qualquer forma.
+> 3. **`ConnectCommand` é singleton e guarda `Established`.** Funciona porque o REPL é sequencial:
+>    o host lê `.Established` logo após o `await` do dispatch. Se alguma coisa passar a despachar
+>    comandos em paralelo, isso vira corrida — a restrição precisa estar escrita, não implícita.
+
 
 
 Fecha a Fase 1: a ferramenta passa a rodar de verdade, nos dois modos. O REPL usa `Console.ReadLine()` por enquanto — a caixa com borda vem na Fase 2.
