@@ -2405,7 +2405,7 @@ Os testes desta task são os mais importantes do projeto: são eles que garantem
 - Consumes: `IConfirmer`, `DestructiveAction` (Task 3).
 - Produces: `InteractiveConfirmer(IAnsiConsole console, Func<string?> readLine)`, `NonInteractiveConfirmer(bool acknowledged, IAnsiConsole console)`.
 
-- [ ] **Step 1: Escrever os testes que falham**
+- [x] **Step 1: Escrever os testes que falham**
 
 Criar `Skat.KawkaProject.Tui.Tests/ConfirmerTests.cs`:
 
@@ -2466,12 +2466,12 @@ public class ConfirmerTests
 }
 ```
 
-- [ ] **Step 2: Rodar os testes para confirmar que falham**
+- [x] **Step 2: Rodar os testes para confirmar que falham**
 
 Run: `dotnet test Skat.KawkaProject.Tui.Tests --filter "FullyQualifiedName~ConfirmerTests"`
 Expected: FAIL com erro de compilação.
 
-- [ ] **Step 3: Implementar os confirmadores**
+- [x] **Step 3: Implementar os confirmadores**
 
 `Skat.KawkaProject.Tui/Safety/InteractiveConfirmer.cs`:
 
@@ -2557,12 +2557,12 @@ services.AddSingleton<IConfirmer>(_ => oneShot || wantsPlain
     : new InteractiveConfirmer(AnsiConsole.Console, Console.ReadLine));
 ```
 
-- [ ] **Step 4: Rodar os testes**
+- [x] **Step 4: Rodar os testes**
 
 Run: `dotnet build && dotnet test Skat.KawkaProject.Tui.Tests`
 Expected: PASS, 7 casos novos (o `Theory` contribui 4).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add Skat.KawkaProject.Tui/Safety Skat.KawkaProject.Tui.Tests/ConfirmerTests.cs Skat.KawkaProject.Tui/Program.cs

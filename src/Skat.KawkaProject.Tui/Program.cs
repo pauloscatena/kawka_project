@@ -69,8 +69,12 @@ services.AddSingleton<ILineReader>(sp => Console.IsInputRedirected
         sp.GetRequiredService<LineHistory>(),
         AnsiConsole.Console));
 
-// Phase 4 replaces this with the real confirmers.
-services.AddSingleton<IConfirmer>(_ => new NotYetImplementedConfirmer());
+// Interactive only when there is someone to ask. IsInputRedirected, not the renderer's TTY check:
+// they answer different questions, and this one decides whether a destructive operation can be
+// waved through. One-shot counts as script even on a terminal - there is no prompt to type into.
+services.AddSingleton<IConfirmer>(_ => oneShot || Console.IsInputRedirected
+    ? new NonInteractiveConfirmer(parsed.HasFlag(NonInteractiveConfirmer.AcknowledgeFlag), AnsiConsole.Console)
+    : new InteractiveConfirmer(AnsiConsole.Console, Console.ReadLine));
 
 services.AddSingleton<TuiHost>();
 
@@ -122,9 +126,3 @@ if (!provider.GetRequiredService<LineHistory>().Save(historyPath))
     Console.Error.WriteLine($"kawka: could not write {historyPath}; this session's history is lost.");
 
 return replExit;
-
-file sealed class NotYetImplementedConfirmer : IConfirmer
-{
-    public Task<bool> ConfirmAsync(DestructiveAction action, CancellationToken ct) =>
-        throw new NotSupportedException("Destructive commands are not available yet (Phase 4).");
-}
