@@ -2169,7 +2169,7 @@ git commit -m "feat(tui): add brokers, groups and lag commands"
 
 > **`produce` não tem `--partition`:** `IMessageService.ProduceAsync` não aceita partição. Não invente a flag.
 
-- [ ] **Step 1: Escrever o teste que falha**
+- [x] **Step 1: Escrever o teste que falha**
 
 Criar `Skat.KawkaProject.Tui.Tests/MessageCommandsTests.cs`:
 
@@ -2268,12 +2268,12 @@ public class MessageCommandsTests
 }
 ```
 
-- [ ] **Step 2: Rodar o teste para confirmar que falha**
+- [x] **Step 2: Rodar o teste para confirmar que falha**
 
 Run: `dotnet test Skat.KawkaProject.Tui.Tests --filter "FullyQualifiedName~MessageCommandsTests"`
 Expected: FAIL com erro de compilação.
 
-- [ ] **Step 3: Implementar**
+- [x] **Step 3: Implementar**
 
 Criar `Skat.KawkaProject.Tui/Commands/MessageCommands.cs`:
 
@@ -2372,12 +2372,12 @@ services.AddSingleton<ITuiCommand, ConsumeCommand>();
 services.AddSingleton<ITuiCommand, ProduceCommand>();
 ```
 
-- [ ] **Step 4: Rodar os testes**
+- [x] **Step 4: Rodar os testes**
 
 Run: `dotnet build && dotnet test Skat.KawkaProject.Tui.Tests`
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add Skat.KawkaProject.Tui Skat.KawkaProject.Tui.Tests/MessageCommandsTests.cs
