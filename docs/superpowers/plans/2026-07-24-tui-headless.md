@@ -2552,15 +2552,22 @@ public sealed class NonInteractiveConfirmer(bool acknowledged, IAnsiConsole cons
 Em `Program.cs`, remover `NotYetImplementedConfirmer` e substituir o registro por:
 
 ```csharp
-services.AddSingleton<IConfirmer>(_ => oneShot || wantsPlain
-    ? new NonInteractiveConfirmer(parsed.HasFlag(NonInteractiveConfirmer.AcknowledgeFlag), AnsiConsole.Console)
-    : new InteractiveConfirmer(AnsiConsole.Console, Console.ReadLine));
+services.AddSingleton<IConfirmer>(_ => ConfirmerChoice.WantsInteractive(oneShot, Console.IsInputRedirected)
+    ? new InteractiveConfirmer(AnsiConsole.Console, Console.ReadLine)
+    : new NonInteractiveConfirmer(parsed.HasFlag(NonInteractiveConfirmer.AcknowledgeFlag), AnsiConsole.Console));
 ```
 
 - [x] **Step 4: Rodar os testes**
 
 Run: `dotnet build && dotnet test Skat.KawkaProject.Tui.Tests`
 Expected: PASS, 7 casos novos (o `Theory` contribui 4).
+
+> **Corrigido na execução (gate da Task 11):** o registro usa `Console.IsInputRedirected`, não
+> `wantsPlain` — este decide renderização, aquele decide se existe alguém para responder. Um operador
+> ao teclado com stdout redirecionado a um arquivo caía em `NonInteractiveConfirmer` pela regra
+> original, e teria toda operação destrutiva recusada em silêncio. A decisão foi extraída para
+> `Safety/ConfirmerChoice.cs` para poder ser testada; enquanto vivia dentro do lambda de registro,
+> o ponto mais crítico do projeto não tinha cobertura nenhuma.
 
 - [x] **Step 5: Commit**
 

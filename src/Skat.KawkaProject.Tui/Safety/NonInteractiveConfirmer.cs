@@ -18,6 +18,15 @@ public sealed class NonInteractiveConfirmer(bool acknowledged, IAnsiConsole cons
 
     public Task<bool> ConfirmAsync(DestructiveAction action, CancellationToken ct)
     {
+        // Not even with the flag. Acknowledging "this deletes data" is not the same as naming which
+        // data, and a blank name means something upstream lost the topic it was working on.
+        if (string.IsNullOrWhiteSpace(action.TopicName))
+        {
+            console.MarkupLine(
+                $"[red]Refusing to {Markup.Escape(action.Verb)} a topic with a blank name.[/]");
+            return Task.FromResult(false);
+        }
+
         // Only on refusal. Printing the warning when the job was told to proceed would put a
         // frightening paragraph into the logs of something working exactly as intended.
         if (!acknowledged)

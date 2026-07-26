@@ -163,6 +163,60 @@ public class ConfirmerTests
         Assert.Equal("", sink.ToString());
     }
 
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    public async Task A_blank_topic_name_can_never_be_confirmed(string blank)
+    {
+        // "Type the exact name" degenerates into "type nothing" when the name is blank: Equals("","")
+        // matches, so pressing Enter confirms. Reachable because the parser keeps a quoted empty
+        // token, so `delete ""` gets past the missing-argument guard with a name of "".
+        var action = new DestructiveAction(blank, "delete",
+            DestructiveAction.RecreateLoses, DestructiveAction.RecreatePreserves);
+
+        var confirmer = new InteractiveConfirmer(Silent(), () => blank);
+
+        Assert.False(await confirmer.ConfirmAsync(action, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task A_blank_topic_name_is_not_even_put_to_the_user()
+    {
+        // There is no answer that should work, so asking invites someone to find one.
+        var asked = false;
+        var action = new DestructiveAction("", "delete",
+            DestructiveAction.RecreateLoses, DestructiveAction.RecreatePreserves);
+
+        await new InteractiveConfirmer(Silent(), () => { asked = true; return ""; })
+            .ConfirmAsync(action, CancellationToken.None);
+
+        Assert.False(asked);
+    }
+
+    [Fact]
+    public async Task A_blank_topic_name_is_refused_without_the_flag_too()
+    {
+        var action = new DestructiveAction("", "delete",
+            DestructiveAction.RecreateLoses, DestructiveAction.RecreatePreserves);
+
+        Assert.False(await new NonInteractiveConfirmer(acknowledged: true, Silent())
+            .ConfirmAsync(action, CancellationToken.None));
+    }
+
+    [Theory]
+    // oneShot, inputRedirected -> interactive?
+    [InlineData(false, false, true)]    // REPL on a terminal: someone is there to ask
+    [InlineData(false, true, false)]    // REPL fed by a pipe: nobody to ask
+    [InlineData(true, false, false)]    // one-shot on a terminal: still a script, no prompt to type into
+    [InlineData(true, true, false)]
+    public void The_confirmer_is_chosen_by_whether_anyone_can_answer(
+        bool oneShot, bool inputRedirected, bool expectInteractive)
+    {
+        // Pulled out of Program.cs so the decision is testable. Getting this wrong is the worst bug
+        // this project could have, and it had no coverage while it lived in a lambda.
+        Assert.Equal(expectInteractive, ConfirmerChoice.WantsInteractive(oneShot, inputRedirected));
+    }
+
     [Fact]
     public void The_acknowledge_flag_is_deliberately_hard_to_type_by_accident()
     {

@@ -11,6 +11,18 @@ public sealed class InteractiveConfirmer(IAnsiConsole console, Func<string?> rea
 {
     public Task<bool> ConfirmAsync(DestructiveAction action, CancellationToken ct)
     {
+        // A blank name turns "type the exact name" into "type nothing": Equals("", "") matches, so
+        // Enter alone would confirm. It is reachable - the parser keeps a quoted empty token, so
+        // `delete ""` arrives here with an empty name. Refused without asking, because there is no
+        // answer that should work and offering the prompt invites someone to find one.
+        if (string.IsNullOrWhiteSpace(action.TopicName))
+        {
+            console.MarkupLine(
+                $"[red]Refusing to {Markup.Escape(action.Verb)} a topic with a blank name.[/] " +
+                "Name the topic explicitly.");
+            return Task.FromResult(false);
+        }
+
         var lines = new List<string>
         {
             $"[bold red]This will {Markup.Escape(action.Verb)} '{Markup.Escape(action.TopicName)}'. It cannot be undone.[/]",
