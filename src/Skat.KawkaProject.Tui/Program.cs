@@ -41,7 +41,28 @@ services.AddSingleton<IResultRenderer>(_ => wantsPlain
     ? new PlainTextRenderer(Console.Out, Console.Error)
     : new SpectreRenderer(AnsiConsole.Console));
 
-services.AddSingleton<ILineReader, ConsoleLineReader>();
+var historyPath = Path.Combine(
+    Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".kawka", "history");
+
+services.AddSingleton<IKeySource, ConsoleKeySource>();
+services.AddSingleton(_ =>
+{
+    var h = new LineHistory();
+    if (!h.Load(historyPath))
+        Console.Error.WriteLine($"kawka: could not read {historyPath}; starting with an empty history.");
+    return h;
+});
+
+// Keyed on IsInputRedirected, not on the renderer's TTY check: they answer different questions.
+// `--output text` with piped input keeps the fancy renderer, and the key-reading prompt would then
+// throw on the first keystroke - Console.ReadKey refuses when stdin is not a terminal. Reading
+// whole lines is the right behaviour without a terminal anyway.
+services.AddSingleton<ILineReader>(sp => Console.IsInputRedirected
+    ? new ConsoleLineReader()
+    : new PromptReader(
+        sp.GetRequiredService<IKeySource>(),
+        sp.GetRequiredService<LineHistory>(),
+        AnsiConsole.Console));
 
 // Phase 4 replaces this with the real confirmers.
 services.AddSingleton<IConfirmer>(_ => new NotYetImplementedConfirmer());
@@ -90,7 +111,12 @@ if (oneShot)
     return await host.RunOnceAsync(parsed, cts.Token);
 }
 
-return await host.RunReplAsync(cts.Token);
+var replExit = await host.RunReplAsync(cts.Token);
+
+if (!provider.GetRequiredService<LineHistory>().Save(historyPath))
+    Console.Error.WriteLine($"kawka: could not write {historyPath}; this session's history is lost.");
+
+return replExit;
 
 file sealed class NotYetImplementedConfirmer : IConfirmer
 {

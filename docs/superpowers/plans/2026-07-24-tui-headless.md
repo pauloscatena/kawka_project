@@ -1742,7 +1742,7 @@ git commit -m "feat(tui): add key source abstraction and command history"
 - Consumes: `IKeySource`, `LineHistory` (Task 7).
 - Produces: `PromptReader(IKeySource keys, LineHistory history, IAnsiConsole console)` com `string? ReadLine()` — devolve `null` em Ctrl+D numa linha vazia.
 
-- [ ] **Step 1: Escrever o teste que falha**
+- [x] **Step 1: Escrever o teste que falha**
 
 Criar `Skat.KawkaProject.Tui.Tests/PromptReaderTests.cs`:
 
@@ -1821,12 +1821,12 @@ public class PromptReaderTests
 }
 ```
 
-- [ ] **Step 2: Rodar o teste para confirmar que falha**
+- [x] **Step 2: Rodar o teste para confirmar que falha**
 
 Run: `dotnet test Skat.KawkaProject.Tui.Tests --filter "FullyQualifiedName~PromptReaderTests"`
 Expected: FAIL com erro de compilação.
 
-- [ ] **Step 3: Implementar `PromptReader`**
+- [x] **Step 3: Implementar `PromptReader`**
 
 Criar `Skat.KawkaProject.Tui/Input/PromptReader.cs`:
 
@@ -1909,7 +1909,7 @@ public sealed class PromptReader(IKeySource keys, LineHistory history, IAnsiCons
 }
 ```
 
-- [ ] **Step 4: Ligar o `PromptReader` ao host**
+- [x] **Step 4: Ligar o `PromptReader` ao host**
 
 Em `Skat.KawkaProject.Tui/TuiHost.cs`, adicionar `PromptReader? promptReader = null` como último parâmetro do construtor primário e substituir as duas linhas de leitura em `RunReplAsync`:
 
@@ -1950,7 +1950,7 @@ services.AddSingleton<TuiHost>(sp => new TuiHost(
     wantsPlain ? null : sp.GetRequiredService<PromptReader>()));
 ```
 
-- [ ] **Step 5: Rodar testes e verificar manualmente**
+- [x] **Step 5: Rodar testes e verificar manualmente**
 
 ```bash
 dotnet build && dotnet test Skat.KawkaProject.Tui.Tests
@@ -1958,7 +1958,7 @@ dotnet run --project Skat.KawkaProject.Tui
 ```
 Expected: testes verdes; o REPL abre com a caixa com borda; digitar `help` e Enter funciona; seta pra cima recupera o comando anterior; Ctrl+D sai.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add Skat.KawkaProject.Tui Skat.KawkaProject.Tui.Tests/PromptReaderTests.cs
