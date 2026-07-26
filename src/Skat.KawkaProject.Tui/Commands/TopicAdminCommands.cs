@@ -118,6 +118,16 @@ public sealed class RecreateCommand(ITopicService topics) : ITuiCommand
 
         var session = ctx.RequireSession();
 
+        // Checked before the confirmation, not after. The service refuses an impossible target
+        // anyway, so nothing was ever at risk - but making someone type a topic name to authorise
+        // an operation that could never run is how you teach them to type it without reading.
+        var current = (await topics.GetTopicDetailAsync(session, topicName)).Partitions.Count;
+        if (target.Value >= current)
+            return new CommandResult.Failure(
+                $"'{topicName}' has {current.ToString(CultureInfo.InvariantCulture)} partitions, and recreate only "
+                + $"reduces them. Use --to between 1 and {(current - 1).ToString(CultureInfo.InvariantCulture)}, "
+                + "or 'increase' to add partitions.", ExitCodes.Usage);
+
         // Core's canonical list, the same one the GUI's warning panel reads.
         if (!await ctx.Confirmer.ConfirmAsync(DestructiveAction.Recreate(topicName), ct))
             return new CommandResult.Failure($"Aborted: '{topicName}' was not modified.", ExitCodes.ConfirmationRefused);

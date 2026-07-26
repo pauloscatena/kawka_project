@@ -2889,13 +2889,18 @@ git commit -m "feat(tui): add create, delete, increase and recreate commands beh
 
 ## Verificação final
 
-- [ ] `dotnet build` → `0 Error(s)`
-- [ ] `dotnet test` → todas as suítes verdes (Docker rodando para as de integração)
-- [ ] `dotnet run --project Skat.KawkaProject.Tui` → REPL abre com a caixa; `help`, `profiles`, `connect`, `topics`, `describe` funcionam
-- [ ] `dotnet run --project Skat.KawkaProject.Tui -- topics --profile local | cat` → saída TSV, sem ANSI, sem bordas
-- [ ] `dotnet run --project Skat.KawkaProject.Tui -- delete x --profile local` → recusa com exit 3
-- [ ] Nenhum arquivo fora de `Rendering/`, `Input/` e `Safety/` referencia `Console` ou `AnsiConsole`:
+- [x] `dotnet build` → `0 Error(s)`
+- [x] `dotnet test` → todas as suítes verdes (Docker rodando para as de integração)
+- [x] `dotnet run --project Skat.KawkaProject.Tui` → REPL abre com a caixa; `help`, `profiles`, `connect`, `topics`, `describe` funcionam
+- [x] `dotnet run --project Skat.KawkaProject.Tui -- topics --profile local | cat` → saída TSV, sem ANSI, sem bordas
+- [x] `dotnet run --project Skat.KawkaProject.Tui -- delete x --profile local` → recusa com exit 3
+- [x] Nenhum arquivo fora de `Rendering/`, `Input/` e `Safety/` referencia `Console` ou `AnsiConsole`:
       `grep -rn "AnsiConsole\|System.Console\|Console\." Skat.KawkaProject.Tui/Commands/` deve retornar vazio
+
+> **Nota sobre o item do REPL:** ele abre e os comandos funcionam (verificado em pty real), mas
+> **sem a caixa com borda**. O redesenho por painel empilhava uma caixa por tecla digitada, porque
+> um painel não pode ser apagado sem controle de cursor multi-linha; a Task 8 entregou redesenho de
+> linha única no lugar. Ver o commit `a944e6a`.
 
 ## Revisão final do projeto
 

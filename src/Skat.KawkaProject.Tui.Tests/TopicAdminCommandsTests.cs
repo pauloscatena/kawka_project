@@ -118,10 +118,49 @@ public class TopicAdminCommandsTests
         svc.Verify(s => s.DeleteTopicAsync(It.IsAny<IKafkaSession>(), It.IsAny<string>()), Times.Never);
     }
 
+    private static Mock<ITopicService> TopicWith(int partitions)
+    {
+        var svc = new Mock<ITopicService>();
+        svc.Setup(s => s.GetTopicDetailAsync(It.IsAny<IKafkaSession>(), "orders"))
+           .ReturnsAsync(new TopicDetail(new TopicInfo("orders", partitions, 1),
+               Enumerable.Range(0, partitions).Select(i => new PartitionInfo(i, 1, 0, 0)).ToList()));
+        return svc;
+    }
+
+    [Theory]
+    [InlineData(8)]     // more than it has
+    [InlineData(4)]     // exactly what it has
+    public async Task Recreate_to_a_count_that_is_not_a_reduction_never_asks_for_confirmation(int target)
+    {
+        // The service refuses this anyway, so nothing was at risk - but making someone type a topic
+        // name to authorise an operation that cannot run teaches them to type it without reading.
+        var svc = TopicWith(4);
+        var confirmer = new FixedConfirmer(true);
+
+        var result = await new RecreateCommand(svc.Object)
+            .ExecuteAsync(Ctx($"recreate orders --to {target}", confirmer), CancellationToken.None);
+
+        Assert.Equal(ExitCodes.Usage, Assert.IsType<CommandResult.Failure>(result).ExitCode);
+        Assert.Equal(0, confirmer.Calls);
+        svc.Verify(s => s.DeleteAndRecreateTopicAsync(It.IsAny<IKafkaSession>(), It.IsAny<string>(), It.IsAny<int>()),
+            Times.Never);
+    }
+
+    [Fact]
+    public async Task Recreate_says_which_counts_would_work()
+    {
+        var result = await new RecreateCommand(TopicWith(4).Object)
+            .ExecuteAsync(Ctx("recreate orders --to 8", new FixedConfirmer(true)), CancellationToken.None);
+
+        var message = Assert.IsType<CommandResult.Failure>(result).Message;
+        Assert.Contains("1 and 3", message);
+        Assert.Contains("increase", message);   // points at the command that does grow a topic
+    }
+
     [Fact]
     public async Task Recreate_tells_the_confirmer_everything_that_will_be_lost()
     {
-        var svc = new Mock<ITopicService>();
+        var svc = TopicWith(4);
         var confirmer = new FixedConfirmer(false);
 
         await new RecreateCommand(svc.Object).ExecuteAsync(Ctx("recreate orders --to 2", confirmer), CancellationToken.None);
@@ -136,7 +175,7 @@ public class TopicAdminCommandsTests
     [Fact]
     public async Task Recreate_does_nothing_when_confirmation_is_refused()
     {
-        var svc = new Mock<ITopicService>();
+        var svc = TopicWith(4);
 
         var result = await new RecreateCommand(svc.Object)
             .ExecuteAsync(Ctx("recreate orders --to 2", new FixedConfirmer(false)), CancellationToken.None);
@@ -149,7 +188,7 @@ public class TopicAdminCommandsTests
     [Fact]
     public async Task Recreate_surfaces_the_preserved_config_when_the_topic_may_be_gone()
     {
-        var svc = new Mock<ITopicService>();
+        var svc = TopicWith(4);
         svc.Setup(s => s.DeleteAndRecreateTopicAsync(It.IsAny<IKafkaSession>(), "orders", 2))
            .ThrowsAsync(RecreateFailed(topicMayBeDeleted: true));
 
@@ -167,7 +206,7 @@ public class TopicAdminCommandsTests
     {
         // The broker refusing the delete (ACL, delete.topic.enable=false) leaves the topic intact.
         // A maximum-severity warning here teaches the operator to dismiss the one that matters.
-        var svc = new Mock<ITopicService>();
+        var svc = TopicWith(4);
         svc.Setup(s => s.DeleteAndRecreateTopicAsync(It.IsAny<IKafkaSession>(), "orders", 2))
            .ThrowsAsync(RecreateFailed(topicMayBeDeleted: false));
 
