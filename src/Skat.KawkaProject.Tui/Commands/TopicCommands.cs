@@ -1,3 +1,4 @@
+using System.Globalization;
 using Skat.KawkaProject.Core.Interfaces;
 
 namespace Skat.KawkaProject.Tui.Commands;
@@ -16,10 +17,14 @@ public sealed class TopicsCommand(ITopicService topics) : ITuiCommand
 
         var rows = all
             .Where(t => filter is null || t.Name.Contains(filter, StringComparison.OrdinalIgnoreCase))
-            .OrderBy(t => t.Name, StringComparer.Ordinal)
+            // Ordered the same way it is filtered. Ordinal would sort every capitalised name into a
+            // block ahead of the lowercase ones, which reads as "not sorted" to someone scanning.
+            .OrderBy(t => t.Name, StringComparer.OrdinalIgnoreCase)
             .Select(t => (IReadOnlyList<string>)new[]
             {
-                t.Name, t.PartitionCount.ToString(), t.ReplicationFactor.ToString()
+                t.Name,
+                t.PartitionCount.ToString(CultureInfo.InvariantCulture),
+                t.ReplicationFactor.ToString(CultureInfo.InvariantCulture)
             })
             .ToList();
 
@@ -50,42 +55,78 @@ public sealed class DescribeCommand(ITopicService topics) : ITuiCommand
         var session = ctx.RequireSession();
         var topicName = ctx.Parsed.Args[0];
         var detail = await topics.GetTopicDetailAsync(session, topicName);
-        var overrides = await topics.GetTopicConfigOverridesAsync(session, topicName);
 
-        // Insertion order is what the user reads: identity first, then shape, then configuration.
-        var facts = new Dictionary<string, string>
+        var parts = new List<CommandResult>
         {
-            ["topic"] = detail.Topic.Name,
-            ["partitions"] = detail.Partitions.Count.ToString(),
-            ["replication factor"] = detail.Topic.ReplicationFactor.ToString()
+            // Identity in its own Pairs, kept apart from the overrides. Merging them into one
+            // dictionary meant a config named "topic" would overwrite the topic's own name - on the
+            // screen someone reads right before deleting it. No Kafka config is called that today;
+            // the separation costs nothing and removes the question.
+            new CommandResult.Pairs(detail.Topic.Name, new Dictionary<string, string>
+            {
+                ["topic"] = detail.Topic.Name,
+                ["partitions"] = detail.Partitions.Count.ToString(CultureInfo.InvariantCulture),
+                ["replication factor"] = detail.Topic.ReplicationFactor.ToString(CultureInfo.InvariantCulture)
+            })
         };
 
-        if (overrides.Count == 0)
-        {
-            // Said out loud: an empty set means "no overrides", not "nobody looked". Silence reads
-            // as the second, and the difference matters before a destructive operation.
-            facts["config"] = "no config overrides";
-        }
-        else
-        {
-            foreach (var (key, value) in overrides.OrderBy(kv => kv.Key, StringComparer.Ordinal))
-                facts[key] = value;
-        }
+        parts.Add(await ReadConfigAsync(session, topicName));
 
+        // InvariantCulture, and no thousands separators: this output is parsed by cut and awk as
+        // often as it is read. Under pt-BR, "N0" renders 1204 as "1.204", which a script cannot
+        // read back as a number.
         var rows = detail.Partitions
             .OrderBy(p => p.PartitionId)
             .Select(p => (IReadOnlyList<string>)new[]
             {
-                p.PartitionId.ToString(), p.LeaderBrokerId.ToString(),
-                p.EarliestOffset.ToString("N0"), p.LatestOffset.ToString("N0"),
-                (p.LatestOffset - p.EarliestOffset).ToString("N0")
+                p.PartitionId.ToString(CultureInfo.InvariantCulture),
+                p.LeaderBrokerId.ToString(CultureInfo.InvariantCulture),
+                p.EarliestOffset.ToString(CultureInfo.InvariantCulture),
+                p.LatestOffset.ToString(CultureInfo.InvariantCulture),
+                (p.LatestOffset - p.EarliestOffset).ToString(CultureInfo.InvariantCulture)
             })
             .ToList();
 
-        return new CommandResult.Group(new CommandResult[]
+        parts.Add(new CommandResult.Table("Partitions",
+            new[] { "P", "LEADER", "EARLIEST", "LATEST", "COUNT" }, rows));
+
+        return new CommandResult.Group(parts);
+    }
+
+    /// <summary>
+    /// The config overrides, or a failure describing why they could not be read.
+    /// </summary>
+    /// <remarks>
+    /// The one place in this command that catches. The dispatcher is the general boundary, but
+    /// letting this call's failure propagate would discard the partitions already fetched by the
+    /// previous one - the operator sees nothing at all, having already paid for the data that did
+    /// arrive. Returning the failure as a part keeps it visible and keeps the exit code non-zero.
+    /// </remarks>
+    private async Task<CommandResult> ReadConfigAsync(IKafkaSession session, string topicName)
+    {
+        try
         {
-            new CommandResult.Pairs(detail.Topic.Name, facts),
-            new CommandResult.Table("Partitions", new[] { "P", "LEADER", "EARLIEST", "LATEST", "COUNT" }, rows)
-        });
+            var overrides = await topics.GetTopicConfigOverridesAsync(session, topicName);
+
+            // Said out loud: an empty set means "no overrides", not "nobody looked". Silence reads
+            // as the second, and the difference matters before a destructive operation.
+            if (overrides.Count == 0)
+                return new CommandResult.Pairs("Config", new Dictionary<string, string>
+                {
+                    ["config"] = "no config overrides"
+                });
+
+            var ordered = new Dictionary<string, string>();
+            foreach (var (key, value) in overrides.OrderBy(kv => kv.Key, StringComparer.Ordinal))
+                ordered[key] = value;
+
+            return new CommandResult.Pairs("Config overrides", ordered);
+        }
+        catch (Exception ex)
+        {
+            return new CommandResult.Failure(
+                $"Could not read config overrides for '{topicName}': {ex.Message}",
+                ExitCodes.OperationalFailure);
+        }
     }
 }

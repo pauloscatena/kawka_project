@@ -88,8 +88,11 @@ public class TopicCommandsTests
         var table = Assert.IsType<CommandResult.Table>(group.Parts.Last());
         Assert.Equal(2, table.Rows.Count);
 
-        var pairs = Assert.IsType<CommandResult.Pairs>(group.Parts.First());
-        Assert.Equal("604800000", pairs.Values["retention.ms"]);
+        // Identity and overrides are separate parts: a config named "topic" must not be able to
+        // overwrite the topic's own name.
+        var overrides = group.Parts.OfType<CommandResult.Pairs>()
+            .Single(p => p.Values.ContainsKey("retention.ms"));
+        Assert.Equal("604800000", overrides.Values["retention.ms"]);
     }
 
     [Fact]
@@ -142,6 +145,84 @@ public class TopicCommandsTests
             .ExecuteAsync(Ctx("describe"), CancellationToken.None);
 
         Assert.Equal(ExitCodes.Usage, Assert.IsType<CommandResult.Failure>(result).ExitCode);
+    }
+
+    [Fact]
+    public async Task Offsets_are_written_the_same_way_whatever_the_server_locale_is()
+    {
+        // This tool runs over SSH on servers with any locale. Under pt-BR, "N0" turns 1204 into
+        // "1.204", and `describe orders | cut -f4` hands a script a number it cannot parse.
+        var original = Thread.CurrentThread.CurrentCulture;
+        try
+        {
+            Thread.CurrentThread.CurrentCulture = new System.Globalization.CultureInfo("pt-BR");
+            var svc = OrdersWith(new Dictionary<string, string>());
+
+            var result = await new DescribeCommand(svc.Object).ExecuteAsync(Ctx("describe orders"), CancellationToken.None);
+
+            var output = new StringWriter();
+            new PlainTextRenderer(output, new StringWriter()).Render(result);
+            Assert.Contains("1204", output.ToString());
+            Assert.DoesNotContain("1.204", output.ToString());
+        }
+        finally { Thread.CurrentThread.CurrentCulture = original; }
+    }
+
+    [Fact]
+    public async Task A_config_override_cannot_overwrite_the_topics_own_identity()
+    {
+        // No Kafka config is called "topic" today, so this is not reachable from a real cluster -
+        // but merging both into one dictionary means the day one is, describe would name the wrong
+        // topic on the screen someone reads before deleting it.
+        var svc = OrdersWith(new Dictionary<string, string>
+        {
+            ["topic"] = "HIJACKED",
+            ["partitions"] = "999"
+        });
+
+        var result = await new DescribeCommand(svc.Object).ExecuteAsync(Ctx("describe orders"), CancellationToken.None);
+
+        var identity = Assert.IsType<CommandResult.Pairs>(Assert.IsType<CommandResult.Group>(result).Parts.First());
+        Assert.Equal("orders", identity.Values["topic"]);
+        Assert.Equal("2", identity.Values["partitions"]);
+    }
+
+    [Fact]
+    public async Task A_failure_reading_config_does_not_throw_away_the_partitions_already_fetched()
+    {
+        // Two network calls. Losing the first call's answer because the second timed out means the
+        // operator sees nothing at all, having already paid for the data that did arrive.
+        var svc = new Mock<ITopicService>();
+        svc.Setup(s => s.GetTopicDetailAsync(It.IsAny<IKafkaSession>(), "orders"))
+           .ReturnsAsync(new TopicDetail(new TopicInfo("orders", 2, 3),
+               new List<PartitionInfo> { new(0, 1, 0, 1204), new(1, 2, 0, 987) }));
+        svc.Setup(s => s.GetTopicConfigOverridesAsync(It.IsAny<IKafkaSession>(), "orders"))
+           .ThrowsAsync(new InvalidOperationException("describe configs timed out"));
+
+        var result = await new DescribeCommand(svc.Object).ExecuteAsync(Ctx("describe orders"), CancellationToken.None);
+
+        var output = new StringWriter();
+        var errors = new StringWriter();
+        new PlainTextRenderer(output, errors).Render(result);
+
+        Assert.Contains("1204", output.ToString());                       // partitions survived
+        Assert.Contains("timed out", errors.ToString());                  // and the failure is stated
+        Assert.NotEqual(ExitCodes.Success, result.ExitCodeOrSuccess);     // without pretending it worked
+    }
+
+    [Fact]
+    public async Task Topics_are_ordered_the_way_they_are_filtered()
+    {
+        var svc = new Mock<ITopicService>();
+        svc.Setup(s => s.ListTopicsAsync(It.IsAny<IKafkaSession>()))
+           .ReturnsAsync(new[] { new TopicInfo("orders", 1, 1), new TopicInfo("Orders-archive", 1, 1) });
+
+        var result = await new TopicsCommand(svc.Object).ExecuteAsync(Ctx("topics"), CancellationToken.None);
+
+        // Ordinal would sort every capitalised name into its own block ahead of the lowercase ones,
+        // which reads as "the list is not sorted" to anyone scanning it.
+        var names = Assert.IsType<CommandResult.Table>(result).Rows.Select(r => r[0]).ToArray();
+        Assert.Equal(new[] { "orders", "Orders-archive" }, names);
     }
 
     [Fact]

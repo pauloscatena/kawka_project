@@ -32,6 +32,12 @@ public abstract record CommandResult
     /// partitions - can return both as data. Without it the only way to carry the second fact was to
     /// write it into a title, which the plain-text renderer drops by design, so it vanished the
     /// moment anyone piped the command.
+    /// <para>
+    /// Must not contain itself. Parts is not copied defensively, so a caller that keeps a reference
+    /// to the list it passed in could add the group to itself - and both the renderers and
+    /// ExitCodeOrSuccess recurse, so the result is a StackOverflowException, which cannot be caught.
+    /// Build the list, then hand it over.
+    /// </para>
     /// </remarks>
     public sealed record Group(IReadOnlyList<CommandResult> Parts) : CommandResult;
 
