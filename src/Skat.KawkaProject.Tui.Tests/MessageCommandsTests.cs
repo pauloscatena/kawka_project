@@ -178,6 +178,44 @@ public class MessageCommandsTests
     }
 
     [Fact]
+    public async Task Consume_renders_in_a_terminal_without_taking_the_process_down()
+    {
+        // Every test here rendered through the TSV path, so nothing exercised the renderer a real
+        // terminal uses - where consume's own title ("orders[0] from offset 42") was fatal.
+        var msgs = new Mock<IMessageService>();
+        msgs.Setup(m => m.FetchMessagesAsync(It.IsAny<IKafkaSession>(), "orders", 0, It.IsAny<long>(), It.IsAny<int>()))
+            .ReturnsAsync(new[] { new KafkaMessage("orders", 0, 42, "k", "v", DateTime.UnixEpoch) });
+
+        var result = await new ConsumeCommand(msgs.Object, TopicWithOffsets(0, 100).Object)
+            .ExecuteAsync(Ctx("consume orders --from 42"), CancellationToken.None);
+
+        var console = Spectre.Console.AnsiConsole.Create(new Spectre.Console.AnsiConsoleSettings
+        {
+            Ansi = Spectre.Console.AnsiSupport.No,
+            ColorSystem = Spectre.Console.ColorSystemSupport.NoColors,
+            Out = new Spectre.Console.AnsiConsoleOutput(new StringWriter())
+        });
+
+        Assert.Null(Record.Exception(() => new SpectreRenderer(console).Render(result)));
+    }
+
+    [Fact]
+    public async Task The_timestamp_column_says_which_clock_it_is_on()
+    {
+        // The service hands back UTC. A bare "2026-07-26 18:58:46" next to a broker log in local
+        // time sends whoever is chasing an incident three hours in the wrong direction.
+        var msgs = new Mock<IMessageService>();
+        msgs.Setup(m => m.FetchMessagesAsync(It.IsAny<IKafkaSession>(), "orders", 0, It.IsAny<long>(), It.IsAny<int>()))
+            .ReturnsAsync(new[] { new KafkaMessage("orders", 0, 1, null, "v", DateTime.UnixEpoch) });
+
+        var result = await new ConsumeCommand(msgs.Object, TopicWithOffsets(0, 10).Object)
+            .ExecuteAsync(Ctx("consume orders --from 0"), CancellationToken.None);
+
+        Assert.Contains(Assert.IsType<CommandResult.Table>(result).Columns,
+            c => c.Contains("UTC", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
     public async Task Produce_requires_a_value()
     {
         var cmd = new ProduceCommand(Mock.Of<IMessageService>());

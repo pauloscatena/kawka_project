@@ -52,9 +52,29 @@ public sealed class PlainTextRenderer(TextWriter output, TextWriter error) : IRe
     /// Only applied to tabular output: <c>Text</c> is prose meant for a human to read, and
     /// mangling a multi-line message there would help nobody.
     /// </remarks>
-    private static string Escape(string value) => value
-        .Replace("\\", "\\\\")
-        .Replace("\t", "\\t")
-        .Replace("\r", "\\r")
-        .Replace("\n", "\\n");
+    private static string Escape(string value)
+    {
+        var escaped = new System.Text.StringBuilder(value.Length);
+
+        foreach (var c in value)
+        {
+            switch (c)
+            {
+                case '\\': escaped.Append(@"\\"); break;
+                case '\t': escaped.Append(@"\t"); break;
+                case '\r': escaped.Append(@"\r"); break;
+                case '\n': escaped.Append(@"\n"); break;
+
+                // Any other control character, NUL above all. A message body is arbitrary bytes,
+                // and a raw NUL truncates the line for anything reading it through a C string -
+                // silently, and only for that one record.
+                default:
+                    if (char.IsControl(c)) escaped.Append(@"\x").Append(((int)c).ToString("x2"));
+                    else escaped.Append(c);
+                    break;
+            }
+        }
+
+        return escaped.ToString();
+    }
 }

@@ -103,6 +103,30 @@ public class RendererTests
     }
 
     [Fact]
+    public void SpectreRenderer_does_not_let_a_title_be_read_as_markup()
+    {
+        // Every other string in this renderer is escaped; the table title was not. consume builds
+        // its title as "topic[0] from offset N", so the brackets are always there - Spectre read
+        // "[0]" as an unclosed tag and threw, taking the process down on every interactive run.
+        var record = new StringWriter();
+        var console = AnsiConsole.Create(new AnsiConsoleSettings
+        {
+            Ansi = AnsiSupport.No,
+            ColorSystem = ColorSystemSupport.NoColors,
+            Out = new AnsiConsoleOutput(record)
+        });
+
+        // Wide enough that Spectre does not ellipsise the title into unrecognisability - the point
+        // is what it renders, not how it fits.
+        var ex = Record.Exception(() => new SpectreRenderer(console).Render(new CommandResult.Table(
+            "orders[0] from offset 42", new[] { "A COLUMN WIDE ENOUGH FOR THE TITLE TO FIT" },
+            new IReadOnlyList<string>[] { new[] { "a value wide enough for the title to fit here" } })));
+
+        Assert.Null(ex);
+        Assert.Contains("orders[0]", record.ToString());
+    }
+
+    [Fact]
     public void SpectreRenderer_survives_an_unclosed_markup_tag_in_data()
     {
         var record = new StringWriter();
@@ -178,5 +202,21 @@ public class RendererTests
             new IReadOnlyList<string>[] { new[] { "1", "2", "3", "4" }, new[] { "only" } })));
 
         Assert.Null(ex);
+    }
+
+    [Fact]
+    public void A_control_byte_in_a_value_cannot_truncate_the_line()
+    {
+        // Message bodies are arbitrary bytes. A raw NUL ends the string for anything reading the
+        // output through a C API - silently, and only for the one record that contains it.
+        var output = new StringWriter();
+        new PlainTextRenderer(output, new StringWriter()).Render(new CommandResult.Table(
+            null, new[] { "KEY", "VALUE" },
+            new IReadOnlyList<string>[] { new[] { "k", "bin\u0000ary\u0001" } }));
+
+        var text = output.ToString();
+        Assert.DoesNotContain('\u0000', text);
+        Assert.DoesNotContain('\u0001', text);
+        Assert.Contains(@"bin\x00ary\x01", text);
     }
 }

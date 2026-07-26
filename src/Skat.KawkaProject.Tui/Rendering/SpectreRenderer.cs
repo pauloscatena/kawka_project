@@ -19,7 +19,11 @@ public sealed class SpectreRenderer(IAnsiConsole console) : IResultRenderer
             case CommandResult.Table t:
             {
                 var table = new Table().Border(TableBorder.Rounded);
-                if (t.Title is not null) table.Title = new TableTitle(t.Title);
+                // Escaped like everything else here. This was the one string that was not, and
+                // consume's title carries brackets by construction ("orders[0] from offset 42"),
+                // which Spectre read as an unclosed tag - throwing outside the dispatcher's
+                // boundary and taking the process down on every interactive run.
+                if (t.Title is not null) table.Title = new TableTitle(Markup.Escape(t.Title));
                 foreach (var c in t.Columns) table.AddColumn(new TableColumn($"[bold]{Markup.Escape(c)}[/]"));
                 foreach (var row in t.Rows) table.AddRow(Fit(row, t.Columns.Count));
                 console.Write(table);

@@ -40,7 +40,9 @@ public sealed class ConsumeCommand(IMessageService messages, ITopicService topic
 
         return new CommandResult.Table(
             $"{topicName}[{partition}] from offset {startOffset.ToString(CultureInfo.InvariantCulture)}",
-            new[] { "OFFSET", "TIMESTAMP", "KEY", "VALUE" }, rows);
+            // The clock is named in the header: the service reports UTC, and a bare timestamp
+            // beside a broker log in local time sends an incident investigation hours off course.
+            new[] { "OFFSET", "TIMESTAMP (UTC)", "KEY", "VALUE" }, rows);
     }
 
     /// <summary>Maps --from to a concrete offset. 'latest' means "the last &lt;limit&gt; messages",
@@ -71,7 +73,10 @@ public sealed class ConsumeCommand(IMessageService messages, ITopicService topic
 public sealed class ProduceCommand(IMessageService messages) : ITuiCommand
 {
     public string Name => "produce";
-    public string Usage => "produce <topic> [--key K] --value V";
+    // The size note is not pedantry: a shell argument tops out around 128 KB on Linux, well under
+    // Kafka's 1 MB default, and the failure happens in execve before this program starts - so it
+    // arrives as "Argument list too long" from the shell, with nothing here able to explain it.
+    public string Usage => "produce <topic> [--key K] --value V   (one-shot --value is limited to ~128 KB by the shell)";
     public string Summary => "Publish a message to a topic";
     public bool RequiresSession => true;
 
