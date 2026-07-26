@@ -1716,6 +1716,23 @@ git commit -m "feat(tui): add key source abstraction and command history"
 
 ### Task 8: `PromptReader` e integração no host
 
+> **Achado do gate da Task 7, BLOQUEANTE para esta task:** `Console.ReadKey(intercept: true)` lança
+> `InvalidOperationException` quando stdin está redirecionado ("Cannot read keys when either
+> application does not have a console or when console input has been redirected"). O rascunho abaixo
+> registra `IKeySource`/`PromptReader` **incondicionalmente** — isso quebra o REPL por pipe, que
+> funciona hoje via `ConsoleLineReader` e é como a ferramenta vem sendo testada
+> (`printf 'topics\nexit\n' | kawka`).
+>
+> Na implementação: escolher o leitor por `Console.IsInputRedirected`, com fallback para
+> `ConsoleLineReader`, seguindo o mesmo padrão de detecção que o `Program.cs` já usa para o renderer.
+> A caixa com borda é conforto de terminal interativo; sem terminal, ler linha a linha continua sendo
+> o comportamento certo.
+>
+> **Também do mesmo gate:** `LineHistory.Load`/`Save` agora devolvem `bool`. Use isso para avisar o
+> usuário quando o histórico não puder ser lido ou gravado — sem esse sinal ele não distingue
+> "ainda não há histórico" de "seu arquivo está ilegível", e não tem onde olhar.
+
+
 **Files:**
 - Create: `Skat.KawkaProject.Tui/Input/PromptReader.cs`
 - Modify: `Skat.KawkaProject.Tui/TuiHost.cs`, `Skat.KawkaProject.Tui/Program.cs`

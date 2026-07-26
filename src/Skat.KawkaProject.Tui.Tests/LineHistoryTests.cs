@@ -103,19 +103,81 @@ public class LineHistoryTests
     [Fact]
     public void An_unreadable_history_file_does_not_stop_the_session_from_starting()
     {
-        // History is a convenience. Refusing to open the REPL because a scratch file is a directory,
-        // or owned by someone else, would trade a nice-to-have for the whole tool.
-        var path = Path.Combine(Path.GetTempPath(), $"kawka-hist-dir-{Guid.NewGuid():N}");
-        Directory.CreateDirectory(path);        // a directory where a file is expected
+        // History is a convenience. Refusing to open the REPL because a scratch file is owned by
+        // someone else would trade a nice-to-have for the whole tool.
+        //
+        // A real file with permissions removed, not a directory: File.Exists is false for a
+        // directory, so that version returned before reaching the try and proved nothing.
+        var path = Path.Combine(Path.GetTempPath(), $"kawka-hist-locked-{Guid.NewGuid():N}");
+        File.WriteAllText(path, "topics\n");
         try
         {
+            File.SetUnixFileMode(path, UnixFileMode.None);
+            // Root ignores the mode bits, so make sure the precondition actually holds before
+            // claiming this covers anything.
+            if (CanStillRead(path)) return;
+
             var h = new LineHistory();
 
             var ex = Record.Exception(() => h.Load(path));
 
             Assert.Null(ex);
+            Assert.Equal("", h.Previous());   // started empty rather than not starting
         }
-        finally { Directory.Delete(path); }
+        finally
+        {
+            File.SetUnixFileMode(path, UnixFileMode.UserRead | UnixFileMode.UserWrite);
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void An_unreadable_history_file_leaves_what_is_already_in_memory_alone()
+    {
+        // Load clears before it reads. If the read then fails, the session loses the history it had
+        // and the catch hides why - the failure path destroying the thing it was protecting.
+        var path = Path.Combine(Path.GetTempPath(), $"kawka-hist-keep-{Guid.NewGuid():N}");
+        File.WriteAllText(path, "from-disk\n");
+        try
+        {
+            File.SetUnixFileMode(path, UnixFileMode.None);
+            if (CanStillRead(path)) return;
+
+            var h = new LineHistory();
+            h.Add("typed-this-session");
+
+            h.Load(path);
+
+            Assert.Equal("typed-this-session", h.Previous());
+        }
+        finally
+        {
+            File.SetUnixFileMode(path, UnixFileMode.UserRead | UnixFileMode.UserWrite);
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void Load_and_Save_report_whether_they_worked()
+    {
+        // Silence is what left a user with no way to tell "no history yet" apart from "the file is
+        // unreadable". The caller can now say something.
+        var path = Path.Combine(Path.GetTempPath(), $"kawka-hist-signal-{Guid.NewGuid():N}");
+        try
+        {
+            var h = new LineHistory();
+            h.Add("topics");
+
+            Assert.True(h.Save(path));
+            Assert.True(new LineHistory().Load(path));
+        }
+        finally { File.Delete(path); }
+    }
+
+    private static bool CanStillRead(string path)
+    {
+        try { File.ReadAllLines(path); return true; }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { return false; }
     }
 
     [Fact]
