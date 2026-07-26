@@ -44,6 +44,11 @@ public class ClusterService : IClusterService
         ((KafkaSession)session).ApplyTo(consumerCfg);
         using var consumer = new ConsumerBuilder<Ignore, Ignore>(consumerCfg).Build();
 
+        // ToList inside the using, not a deferred Select escaping it. Select is lazy, so the
+        // watermark queries used to run when the caller enumerated - by which point `using` had
+        // already destroyed the consumer's native handle, and every call threw
+        // ObjectDisposedException ("handle is destroyed"). Only reachable when the group HAS
+        // committed offsets, which is the one case anyone runs this for.
         return partitionOffsets.Select(po =>
         {
             var wm = consumer.QueryWatermarkOffsets(
@@ -51,6 +56,6 @@ public class ClusterService : IClusterService
             var current = po.Offset.IsSpecial ? 0 : po.Offset.Value;
             return new PartitionLag(po.Topic, po.Partition.Value, current, wm.High.Value,
                 wm.High.Value - current);
-        });
+        }).ToList();
     }
 }

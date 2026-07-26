@@ -66,8 +66,24 @@ public sealed class LagCommand(IClusterService cluster) : ITuiCommand
         if (ctx.Parsed.Args.Count == 0)
             return new CommandResult.Failure($"Missing group id. Usage: {Usage}", ExitCodes.Usage);
 
+        var session = ctx.RequireSession();
         var group = ctx.Parsed.Args[0];
-        var lags = (await cluster.GetGroupLagAsync(ctx.RequireSession(), group)).ToList();
+        var lags = (await cluster.GetGroupLagAsync(session, group)).ToList();
+
+        // A group that does not exist answers exactly like one that exists with nothing committed:
+        // no partitions, no lag. Those mean very different things to someone checking whether a
+        // consumer is keeping up, so when the answer is empty - and only then, to keep the normal
+        // path at one round trip - ask whether the group is there at all.
+        if (lags.Count == 0)
+        {
+            var known = (await cluster.ListConsumerGroupsAsync(session))
+                .Any(g => string.Equals(g.GroupId, group, StringComparison.Ordinal));
+
+            if (!known)
+                return new CommandResult.Failure(
+                    $"No consumer group '{group}' on this cluster. Run 'groups' to see what is there.",
+                    ExitCodes.Usage);
+        }
 
         // Stated even when there are no rows: "no partitions listed" and "fully caught up" look the
         // same otherwise, and they mean different things - no committed offsets versus zero lag.
@@ -81,7 +97,9 @@ public sealed class LagCommand(IClusterService cluster) : ITuiCommand
         // InvariantCulture and no separators: the LAG column is read back by scripts at least as
         // often as by people, and "149.900" parses as 149 in most of them.
         var rows = lags
-            .OrderBy(l => l.Topic, StringComparer.Ordinal).ThenBy(l => l.Partition)
+            // OrdinalIgnoreCase like every other name listing here: Ordinal puts every capitalised
+            // topic in a block ahead of the lowercase ones, which reads as an unsorted list.
+            .OrderBy(l => l.Topic, StringComparer.OrdinalIgnoreCase).ThenBy(l => l.Partition)
             .Select(l => (IReadOnlyList<string>)new[]
             {
                 l.Topic,

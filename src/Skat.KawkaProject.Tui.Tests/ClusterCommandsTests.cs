@@ -120,6 +120,8 @@ public class ClusterCommandsTests
         var svc = new Mock<IClusterService>();
         svc.Setup(s => s.GetGroupLagAsync(It.IsAny<IKafkaSession>(), "idle"))
            .ReturnsAsync(Array.Empty<PartitionLag>());
+        svc.Setup(s => s.ListConsumerGroupsAsync(It.IsAny<IKafkaSession>()))
+           .ReturnsAsync(new[] { new ConsumerGroupInfo("idle", "Empty", 0) });
 
         var result = await new LagCommand(svc.Object).ExecuteAsync(Ctx("lag idle"), CancellationToken.None);
 
@@ -147,5 +149,53 @@ public class ClusterCommandsTests
             await new BrokersCommand(svc.Object).ExecuteAsync(Ctx("brokers"), CancellationToken.None));
 
         Assert.Equal(new[] { "1", "3" }, table.Rows.Select(r => r[0]));
+    }
+
+    [Fact]
+    public async Task Lag_for_a_group_that_does_not_exist_says_so()
+    {
+        // Otherwise it is indistinguishable from a group that exists and is fully caught up - and
+        // "nothing is behind" is a very different answer from "that consumer is not running".
+        var svc = new Mock<IClusterService>();
+        svc.Setup(s => s.GetGroupLagAsync(It.IsAny<IKafkaSession>(), "typo"))
+           .ReturnsAsync(Array.Empty<PartitionLag>());
+        svc.Setup(s => s.ListConsumerGroupsAsync(It.IsAny<IKafkaSession>()))
+           .ReturnsAsync(new[] { new ConsumerGroupInfo("billing", "Stable", 1) });
+
+        var result = await new LagCommand(svc.Object).ExecuteAsync(Ctx("lag typo"), CancellationToken.None);
+
+        var failure = Assert.IsType<CommandResult.Failure>(result);
+        Assert.Equal(ExitCodes.Usage, failure.ExitCode);
+        Assert.Contains("typo", failure.Message);
+    }
+
+    [Fact]
+    public async Task A_group_with_lag_costs_only_one_round_trip()
+    {
+        // The existence check is for the ambiguous empty answer only. Paying for it on every call
+        // would double the cost of the command's normal path.
+        var svc = BillingLag();
+
+        await new LagCommand(svc.Object).ExecuteAsync(Ctx("lag billing"), CancellationToken.None);
+
+        svc.Verify(s => s.ListConsumerGroupsAsync(It.IsAny<IKafkaSession>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task Groups_are_listed_in_a_predictable_order()
+    {
+        var svc = new Mock<IClusterService>();
+        svc.Setup(s => s.ListConsumerGroupsAsync(It.IsAny<IKafkaSession>()))
+           .ReturnsAsync(new[]
+           {
+               new ConsumerGroupInfo("zeta", "Stable", 1),
+               new ConsumerGroupInfo("Alpha", "Empty", 0),
+               new ConsumerGroupInfo("beta", "Stable", 2)
+           });
+
+        var table = Assert.IsType<CommandResult.Table>(
+            await new GroupsCommand(svc.Object).ExecuteAsync(Ctx("groups"), CancellationToken.None));
+
+        Assert.Equal(new[] { "Alpha", "beta", "zeta" }, table.Rows.Select(r => r[0]));
     }
 }
