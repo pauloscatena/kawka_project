@@ -1196,6 +1196,12 @@ git commit -m "feat(tui): add topics and describe commands"
 
 ### Task 6: `Program`, `TuiHost` e o comando `help`
 
+> **Achado do gate da Task 3, a honrar aqui:** `CommandRegistry.All` devolve `_byName.Values`, ou
+> seja, a ordem de inserção do dicionário — que é a ordem de registro no composition root, arbitrária
+> do ponto de vista de quem lê a ajuda (e nem sequer é contrato documentado do `Dictionary`). O
+> `HelpCommand` deve **ordenar explicitamente por `Name`** ao renderizar, em vez de confiar em `All`.
+
+
 Fecha a Fase 1: a ferramenta passa a rodar de verdade, nos dois modos. O REPL usa `Console.ReadLine()` por enquanto — a caixa com borda vem na Fase 2.
 
 **Files:**

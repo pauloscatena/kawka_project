@@ -136,6 +136,78 @@ public class DispatcherTests
         Assert.Equal("listed", Assert.IsType<CommandResult.Text>(result).Message);
     }
 
+    private sealed class ThrowingMetadataCommand(string name, bool throwOnUsage) : ITuiCommand
+    {
+        public string Name => name;
+        public string Usage => throwOnUsage
+            ? throw new InvalidOperationException("Usage getter blew up")
+            : name;
+        public string Summary => "stub";
+        public bool RequiresSession => throwOnUsage
+            ? false
+            : throw new InvalidOperationException("RequiresSession getter blew up");
+        public Task<CommandResult> ExecuteAsync(CommandContext ctx, CancellationToken ct) =>
+            throw new FormatException("the original problem");
+    }
+
+    [Fact]
+    public async Task A_throwing_RequiresSession_does_not_escape_the_dispatcher()
+    {
+        // The dispatcher is documented as the only place that catches Exception. Reading command
+        // metadata outside its try makes that false, and the REPL has nothing above it to catch.
+        var result = await DispatcherWith(new ThrowingMetadataCommand("bad", throwOnUsage: false))
+            .DispatchAsync(ArgumentParser.ParseLine("bad"), null, AlwaysYes, CancellationToken.None);
+
+        var failure = Assert.IsType<CommandResult.Failure>(result);
+        Assert.Contains("RequiresSession getter blew up", failure.Message);
+    }
+
+    [Fact]
+    public async Task A_throwing_Usage_does_not_lose_the_error_being_reported()
+    {
+        // Usage is read while formatting the usage failure. If that getter throws, the user's actual
+        // mistake is replaced by an internal crash - the failure path destroying the failure.
+        var result = await DispatcherWith(new ThrowingMetadataCommand("bad", throwOnUsage: true))
+            .DispatchAsync(ArgumentParser.ParseLine("bad"), null, AlwaysYes, CancellationToken.None);
+
+        var failure = Assert.IsType<CommandResult.Failure>(result);
+        Assert.Contains("the original problem", failure.Message);
+    }
+
+    [Fact]
+    public async Task A_timeout_that_is_not_the_users_cancellation_keeps_its_own_message()
+    {
+        // TaskCanceledException derives from OperationCanceledException, so an HTTP or driver
+        // timeout inside a command would be reported as "Cancelled." - telling the operator they
+        // pressed Ctrl+C when they did not, and throwing away the only clue about what timed out.
+        var cmd = new StubCommand("slow", false,
+            _ => throw new TaskCanceledException("metadata request timed out"));
+
+        var result = await DispatcherWith(cmd).DispatchAsync(
+            ArgumentParser.ParseLine("slow"), null, AlwaysYes, CancellationToken.None);
+
+        var failure = Assert.IsType<CommandResult.Failure>(result);
+        Assert.Contains("timed out", failure.Message);
+        Assert.Equal(ExitCodes.OperationalFailure, failure.ExitCode);
+    }
+
+    [Fact]
+    public async Task A_real_cancellation_exits_with_its_own_code()
+    {
+        // Ctrl+C is not an operational failure. A script retrying on exit code 1 must not retry
+        // something the operator deliberately stopped.
+        using var cts = new CancellationTokenSource();
+        await cts.CancelAsync();
+        var cmd = new StubCommand("slow", false, _ => throw new OperationCanceledException());
+
+        var result = await DispatcherWith(cmd).DispatchAsync(
+            ArgumentParser.ParseLine("slow"), null, AlwaysYes, cts.Token);
+
+        var failure = Assert.IsType<CommandResult.Failure>(result);
+        Assert.Equal(ExitCodes.Cancelled, failure.ExitCode);
+        Assert.Contains("Cancel", failure.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
     [Fact]
     public void Two_commands_claiming_the_same_name_is_caught_when_the_registry_is_built()
     {
