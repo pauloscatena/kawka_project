@@ -533,7 +533,7 @@ O dispatcher é a **única** fronteira que captura `Exception`. É isso que impe
 - Consumes: `ParsedCommand`, `CommandResult`, `ExitCodes` (Task 1).
 - Produces: `ITuiCommand`, `CommandContext`, `CommandRegistry.Resolve(string)`, `CommandRegistry.All`, `CommandDispatcher.DispatchAsync(ParsedCommand, IKafkaSession?, IConfirmer, CancellationToken)`. Todas as tasks de comando implementam `ITuiCommand`.
 
-- [ ] **Step 1: Escrever o teste que falha**
+- [x] **Step 1: Escrever o teste que falha**
 
 Criar `Skat.KawkaProject.Tui.Tests/DispatcherTests.cs`:
 
@@ -626,12 +626,12 @@ public class DispatcherTests
 }
 ```
 
-- [ ] **Step 2: Rodar o teste para confirmar que falha**
+- [x] **Step 2: Rodar o teste para confirmar que falha**
 
 Run: `dotnet test Skat.KawkaProject.Tui.Tests --filter "FullyQualifiedName~DispatcherTests"`
 Expected: FAIL com erro de compilação.
 
-- [ ] **Step 3: Implementar contrato, registry e dispatcher**
+- [x] **Step 3: Implementar contrato, registry e dispatcher**
 
 `Skat.KawkaProject.Tui/Commands/ITuiCommand.cs`:
 
@@ -757,12 +757,12 @@ public interface IConfirmer
 }
 ```
 
-- [ ] **Step 4: Rodar os testes**
+- [x] **Step 4: Rodar os testes**
 
 Run: `dotnet test Skat.KawkaProject.Tui.Tests`
 Expected: PASS, 5 testes novos.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add Skat.KawkaProject.Tui/Commands Skat.KawkaProject.Tui/Safety Skat.KawkaProject.Tui.Tests/DispatcherTests.cs
