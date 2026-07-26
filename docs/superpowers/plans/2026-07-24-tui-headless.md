@@ -325,7 +325,7 @@ git commit -m "feat(tui): scaffold TUI project with command result types and arg
 - Consumes: `CommandResult` (Task 1).
 - Produces: `IResultRenderer.Render(CommandResult)`. `SpectreRenderer(IAnsiConsole)` e `PlainTextRenderer(TextWriter output, TextWriter error)` — ambos injetáveis para teste.
 
-- [ ] **Step 1: Escrever o teste que falha**
+- [x] **Step 1: Escrever o teste que falha**
 
 Criar `Skat.KawkaProject.Tui.Tests/RendererTests.cs`:
 
@@ -393,12 +393,12 @@ public class RendererTests
 }
 ```
 
-- [ ] **Step 2: Rodar o teste para confirmar que falha**
+- [x] **Step 2: Rodar o teste para confirmar que falha**
 
 Run: `dotnet test Skat.KawkaProject.Tui.Tests --filter "FullyQualifiedName~RendererTests"`
 Expected: FAIL com erro de compilação.
 
-- [ ] **Step 3: Implementar os renderers**
+- [x] **Step 3: Implementar os renderers**
 
 `Skat.KawkaProject.Tui/Rendering/IResultRenderer.cs`:
 
@@ -498,12 +498,12 @@ public sealed class SpectreRenderer(IAnsiConsole console) : IResultRenderer
 }
 ```
 
-- [ ] **Step 4: Rodar os testes**
+- [x] **Step 4: Rodar os testes**
 
 Run: `dotnet test Skat.KawkaProject.Tui.Tests`
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add Skat.KawkaProject.Tui/Rendering Skat.KawkaProject.Tui.Tests/RendererTests.cs
