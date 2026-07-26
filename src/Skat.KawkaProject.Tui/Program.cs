@@ -1,21 +1,87 @@
-namespace Skat.KawkaProject.Tui;
+using Microsoft.Extensions.DependencyInjection;
+using Spectre.Console;
+using Skat.KawkaProject.Core.Interfaces;
+using Skat.KawkaProject.Core.Models;
+using Skat.KawkaProject.Kafka;
+using Skat.KawkaProject.Tui;
+using Skat.KawkaProject.Tui.Commands;
+using Skat.KawkaProject.Tui.Input;
+using Skat.KawkaProject.Tui.Rendering;
+using Skat.KawkaProject.Tui.Safety;
 
-/// <summary>
-/// Placeholder entry point, replaced in Task 6 by the real one (argv dispatch, REPL and DI).
-/// </summary>
-/// <remarks>
-/// It exists from Task 1 because a console project without a Main does not compile (CS5001), and
-/// the plan does not create the real entry point until Task 6 - which would leave Tasks 1 to 5
-/// unable to build or run a single test. It returns OperationalFailure rather than Success so that
-/// anyone running the half-assembled tool gets a non-zero exit instead of silent success.
-/// </remarks>
-internal static class Program
+var parsed = ArgumentParser.ParseArgv(args);
+var oneShot = !string.IsNullOrWhiteSpace(parsed.Verb);
+
+// TTY detection happens ONCE, here, so no code downstream needs to branch on it.
+var wantsPlain = parsed.Flag("output") == "tsv"
+                 || (!AnsiConsole.Profile.Capabilities.Interactive && parsed.Flag("output") != "text");
+
+var services = new ServiceCollection();
+services.AddSingleton<IConnectionProfileRepository, ConnectionProfileRepository>();
+services.AddSingleton<IKafkaConnectionFactory, KafkaConnectionFactory>();
+services.AddTransient<ITopicService, TopicService>();
+services.AddTransient<IMessageService, MessageService>();
+services.AddTransient<IClusterService, ClusterService>();
+
+services.AddSingleton<ITuiCommand, ProfilesCommand>();
+services.AddSingleton<ITuiCommand, ConnectCommand>();
+services.AddSingleton<ITuiCommand, DisconnectCommand>();
+services.AddSingleton<ITuiCommand, StatusCommand>();
+services.AddSingleton<ITuiCommand, TopicsCommand>();
+services.AddSingleton<ITuiCommand, DescribeCommand>();
+
+// Lazily resolved: help is a command that needs the registry, and the registry needs every
+// command. Deferring the lookup breaks the cycle without leaving help out of its own listing.
+services.AddSingleton<ITuiCommand>(sp => new HelpCommand(() => sp.GetRequiredService<CommandRegistry>()));
+
+services.AddSingleton(sp => new CommandRegistry(sp.GetServices<ITuiCommand>()));
+services.AddSingleton<CommandDispatcher>();
+
+services.AddSingleton<IResultRenderer>(_ => wantsPlain
+    ? new PlainTextRenderer(Console.Out, Console.Error)
+    : new SpectreRenderer(AnsiConsole.Console));
+
+services.AddSingleton<ILineReader, ConsoleLineReader>();
+
+// Phase 4 replaces this with the real confirmers.
+services.AddSingleton<IConfirmer>(_ => new NotYetImplementedConfirmer());
+
+services.AddSingleton<TuiHost>();
+
+using var provider = services.BuildServiceProvider();
+using var host = provider.GetRequiredService<TuiHost>();
+
+using var cts = new CancellationTokenSource();
+
+// Ctrl+C during a command cancels just that command and returns the prompt; Ctrl+C at an idle
+// prompt exits. Matches the Claude Code behaviour the layout is modelled on.
+Console.CancelKeyPress += (_, e) =>
 {
-    private static int Main(string[] args)
+    e.Cancel = true;
+    if (!host.CancelRunningCommand()) cts.Cancel();
+};
+
+if (oneShot)
+{
+    // One-shot needs its session established up front, since there is no REPL to 'connect' in.
+    // Quietly: the user asked for `topics`, not for a "Connected to ..." line ahead of it in
+    // whatever is reading stdout. A failure to connect is still reported, and stops the run -
+    // continuing would report "no active connection" for a reason we already know.
+    var profile = parsed.Flag("profile");
+    if (profile is not null)
     {
-        // Says so out loud rather than just returning non-zero: a silent failure is
-        // indistinguishable from a real one for anyone who runs the half-assembled tool.
-        Console.Error.WriteLine("kawka: the command line entry point is not wired up yet (Task 6).");
-        return ExitCodes.OperationalFailure;
+        var connectCode = await host.RunQuietlyAsync(
+            ArgumentParser.ParseLine($"connect {profile}"), cts.Token);
+        if (connectCode != ExitCodes.Success) return connectCode;
     }
+
+    return await host.RunOnceAsync(parsed, cts.Token);
+}
+
+return await host.RunReplAsync(cts.Token);
+
+file sealed class NotYetImplementedConfirmer : IConfirmer
+{
+    public Task<bool> ConfirmAsync(DestructiveAction action, CancellationToken ct) =>
+        throw new NotSupportedException("Destructive commands are not available yet (Phase 4).");
 }

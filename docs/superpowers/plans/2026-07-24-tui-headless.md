@@ -1226,7 +1226,7 @@ Fecha a Fase 1: a ferramenta passa a rodar de verdade, nos dois modos. O REPL us
 - Consumes: tudo das Tasks 1-5.
 - Produces: `TuiHost.RunReplAsync(CancellationToken)`, `TuiHost.RunOnceAsync(ParsedCommand, CancellationToken)`, `HelpCommand`.
 
-- [ ] **Step 1: Escrever o teste do help**
+- [x] **Step 1: Escrever o teste do help**
 
 Criar `Skat.KawkaProject.Tui.Tests/HelpCommandTests.cs`:
 
@@ -1291,12 +1291,12 @@ public class HelpCommandTests
 }
 ```
 
-- [ ] **Step 2: Rodar o teste para confirmar que falha**
+- [x] **Step 2: Rodar o teste para confirmar que falha**
 
 Run: `dotnet test Skat.KawkaProject.Tui.Tests --filter "FullyQualifiedName~HelpCommandTests"`
 Expected: FAIL com erro de compilação.
 
-- [ ] **Step 3: Implementar `HelpCommand`**
+- [x] **Step 3: Implementar `HelpCommand`**
 
 Criar `Skat.KawkaProject.Tui/Commands/HelpCommand.cs`:
 
@@ -1332,7 +1332,7 @@ public sealed class HelpCommand(CommandRegistry registry) : ITuiCommand
 }
 ```
 
-- [ ] **Step 4: Implementar `TuiHost`**
+- [x] **Step 4: Implementar `TuiHost`**
 
 Criar `Skat.KawkaProject.Tui/TuiHost.cs`:
 
@@ -1435,7 +1435,7 @@ public sealed class TuiHost(
 }
 ```
 
-- [ ] **Step 5: Implementar `Program`**
+- [x] **Step 5: Implementar `Program`**
 
 Criar `Skat.KawkaProject.Tui/Program.cs`:
 
@@ -1519,7 +1519,7 @@ file sealed class NotYetImplementedConfirmer : IConfirmer
 }
 ```
 
-- [ ] **Step 6: Verificar build, testes e execução real**
+- [x] **Step 6: Verificar build, testes e execução real**
 
 ```bash
 dotnet build && dotnet test Skat.KawkaProject.Tui.Tests
@@ -1528,7 +1528,7 @@ dotnet run --project Skat.KawkaProject.Tui -- help | cat        # sem TTY: deve 
 ```
 Expected: build limpo; testes verdes; `help` lista os comandos; a versão com `| cat` sai sem bordas nem ANSI.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add Skat.KawkaProject.Tui Skat.KawkaProject.Tui.Tests
@@ -1550,7 +1550,7 @@ Isolada de propósito: é a parte mais trabalhosa e a de menor risco funcional. 
 **Interfaces:**
 - Produces: `IKeySource.ReadKey()`, `LineHistory.Add(string)`, `LineHistory.Previous()`, `LineHistory.Next()`, `LineHistory.ResetCursor()`, `LineHistory.Load(string path)`, `LineHistory.Save(string path)`. Task 8 consome ambos.
 
-- [ ] **Step 1: Escrever o teste que falha**
+- [x] **Step 1: Escrever o teste que falha**
 
 Criar `Skat.KawkaProject.Tui.Tests/LineHistoryTests.cs`:
 
