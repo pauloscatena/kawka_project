@@ -21,7 +21,7 @@ public sealed class SpectreRenderer(IAnsiConsole console) : IResultRenderer
                 var table = new Table().Border(TableBorder.Rounded);
                 if (t.Title is not null) table.Title = new TableTitle(t.Title);
                 foreach (var c in t.Columns) table.AddColumn(new TableColumn($"[bold]{Markup.Escape(c)}[/]"));
-                foreach (var row in t.Rows) table.AddRow(row.Select(cell => Markup.Escape(cell)).ToArray());
+                foreach (var row in t.Rows) table.AddRow(Fit(row, t.Columns.Count));
                 console.Write(table);
                 break;
             }
@@ -44,5 +44,24 @@ public sealed class SpectreRenderer(IAnsiConsole console) : IResultRenderer
                 console.MarkupLine($"[red]{Markup.Escape(f.Message)}[/]");
                 break;
         }
+    }
+
+    /// <summary>
+    /// Forces a row to the table's column count, padding short rows and dropping the overflow of
+    /// long ones.
+    /// </summary>
+    /// <remarks>
+    /// A row that does not match the columns is a bug in the command that built it, and Spectre
+    /// throws on the overflowing case. This renderer runs OUTSIDE the dispatcher's exception
+    /// boundary - it is called on the result the dispatcher already returned - so an exception here
+    /// takes the whole REPL down instead of printing one bad line. Rendering is the last thing that
+    /// happens; it should never be the thing that fails.
+    /// </remarks>
+    private static string[] Fit(IReadOnlyList<string> row, int columnCount)
+    {
+        var cells = new string[columnCount];
+        for (var i = 0; i < columnCount; i++)
+            cells[i] = i < row.Count ? Markup.Escape(row[i]) : string.Empty;
+        return cells;
     }
 }

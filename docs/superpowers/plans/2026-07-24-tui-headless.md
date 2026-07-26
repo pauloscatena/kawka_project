@@ -986,6 +986,18 @@ git commit -m "feat(tui): add profiles, connect, disconnect and status commands"
 
 ### Task 5: Comandos de leitura de tópicos
 
+> **Achado do gate da Task 2, a honrar aqui:** o `DescribeCommand` desenhado abaixo carrega os
+> **config overrides do tópico dentro do `Title`** da `Table`, com o comentário de que "os overrides
+> viajam no título para um único resultado carregar os dois fatos". Isso perde a informação em modo
+> pipe: o `PlainTextRenderer` descarta títulos de propósito (são decoração, e um pipeline
+> `describe orders | cut -f1` não deve ter de saber pular uma linha). Resultado: `describe` por pipe
+> mostraria as partições e **omitiria os overrides em silêncio**.
+>
+> Corrija na implementação: o título fica para decoração, e os config overrides saem como dado de
+> verdade — uma `Pairs` adicional, ou linhas próprias na tabela. A regra geral, já documentada no
+> `PlainTextRenderer`: **se um fato importa, ele vai numa coluna ou num par, nunca num título.**
+
+
 **Files:**
 - Create: `Skat.KawkaProject.Tui/Commands/TopicCommands.cs`
 - Test: `Skat.KawkaProject.Tui.Tests/TopicCommandsTests.cs`

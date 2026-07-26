@@ -22,7 +22,9 @@ public class RendererTests
         var text = output.ToString();
         Assert.Contains("NAME\tPARTS", text);
         Assert.Contains("orders\t4", text);
-        Assert.DoesNotContain("[", text);   // no ANSI escapes
+        // Escaped rather than a literal ESC byte: the control character is invisible in most
+        // editors, and one stray reformat silently turns this into a check for a bare bracket.
+        Assert.DoesNotContain("\u001b[", text);
         Assert.DoesNotContain("│", text);         // no box drawing
     }
 
@@ -116,5 +118,65 @@ public class RendererTests
 
         Assert.Null(ex);
         Assert.Contains("[bold", record.ToString());
+    }
+
+    [Fact]
+    public void A_tab_inside_a_value_does_not_become_a_column_separator()
+    {
+        // Message payloads are arbitrary bytes. A raw tab puts the rest of the value in the next
+        // field, so `cut -f2` returns half a value on one row and the whole one on the next.
+        var output = new StringWriter();
+        new PlainTextRenderer(output, new StringWriter()).Render(new CommandResult.Table(
+            null, new[] { "KEY", "VALUE" },
+            new IReadOnlyList<string>[] { new[] { "k1", "left\tright" }, new[] { "k2", "plain" } }));
+
+        var lines = output.ToString().Split('\n', StringSplitOptions.RemoveEmptyEntries);
+        Assert.All(lines, line => Assert.Equal(1, line.Count(c => c == '\t')));
+        Assert.Contains(@"left\tright", output.ToString());
+    }
+
+    [Fact]
+    public void A_newline_inside_a_value_does_not_become_a_second_record()
+    {
+        // A multi-line JSON payload would print as extra lines that any line-oriented reader counts
+        // as further records - silently inflating how many messages came back.
+        var output = new StringWriter();
+        new PlainTextRenderer(output, new StringWriter()).Render(new CommandResult.Table(
+            null, new[] { "KEY", "VALUE" },
+            new IReadOnlyList<string>[] { new[] { "k1", "line1\nline2\r\nline3" } }));
+
+        var lines = output.ToString().Split('\n', StringSplitOptions.RemoveEmptyEntries);
+        Assert.Equal(2, lines.Length);   // header + exactly one record
+        Assert.Contains(@"line1\nline2\r\nline3", output.ToString());
+    }
+
+    [Fact]
+    public void Pairs_values_are_escaped_the_same_way()
+    {
+        var output = new StringWriter();
+        new PlainTextRenderer(output, new StringWriter()).Render(
+            new CommandResult.Pairs(null, new Dictionary<string, string> { ["k"] = "a\tb" }));
+
+        Assert.Equal(1, output.ToString().TrimEnd('\n').Count(c => c == '\t'));
+    }
+
+    [Fact]
+    public void SpectreRenderer_does_not_crash_on_a_row_that_does_not_match_the_columns()
+    {
+        // A command building a malformed table is a programming bug, but the renderer runs outside
+        // the dispatcher's exception boundary - throwing here takes down the whole REPL.
+        var record = new StringWriter();
+        var console = AnsiConsole.Create(new AnsiConsoleSettings
+        {
+            Ansi = AnsiSupport.No,
+            ColorSystem = ColorSystemSupport.NoColors,
+            Out = new AnsiConsoleOutput(record)
+        });
+
+        var ex = Record.Exception(() => new SpectreRenderer(console).Render(new CommandResult.Table(
+            null, new[] { "A", "B" },
+            new IReadOnlyList<string>[] { new[] { "1", "2", "3", "4" }, new[] { "only" } })));
+
+        Assert.Null(ex);
     }
 }
