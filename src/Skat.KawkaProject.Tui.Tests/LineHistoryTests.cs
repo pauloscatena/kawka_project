@@ -112,10 +112,7 @@ public class LineHistoryTests
         File.WriteAllText(path, "topics\n");
         try
         {
-            File.SetUnixFileMode(path, UnixFileMode.None);
-            // Root ignores the mode bits, so make sure the precondition actually holds before
-            // claiming this covers anything.
-            if (CanStillRead(path)) return;
+            if (!TryMakeUnreadable(path)) return;
 
             var h = new LineHistory();
 
@@ -126,7 +123,7 @@ public class LineHistoryTests
         }
         finally
         {
-            File.SetUnixFileMode(path, UnixFileMode.UserRead | UnixFileMode.UserWrite);
+            RestoreAccess(path);
             File.Delete(path);
         }
     }
@@ -140,8 +137,7 @@ public class LineHistoryTests
         File.WriteAllText(path, "from-disk\n");
         try
         {
-            File.SetUnixFileMode(path, UnixFileMode.None);
-            if (CanStillRead(path)) return;
+            if (!TryMakeUnreadable(path)) return;
 
             var h = new LineHistory();
             h.Add("typed-this-session");
@@ -152,7 +148,7 @@ public class LineHistoryTests
         }
         finally
         {
-            File.SetUnixFileMode(path, UnixFileMode.UserRead | UnixFileMode.UserWrite);
+            RestoreAccess(path);
             File.Delete(path);
         }
     }
@@ -196,6 +192,30 @@ public class LineHistoryTests
             Assert.Contains("brokers", saved);
         }
         finally { File.Delete(path); }
+    }
+
+    /// <summary>
+    /// Takes read permission away, or reports that this run cannot.
+    /// </summary>
+    /// <remarks>
+    /// The permission bits are a Unix concept, and File.SetUnixFileMode throws on Windows - so the
+    /// platform check is both what keeps the test honest there and what tells the analyser this call
+    /// is guarded. It also returns false when the file is still readable afterwards, which is what
+    /// happens as root: better to skip than to claim coverage the run never had.
+    /// </remarks>
+    private static bool TryMakeUnreadable(string path)
+    {
+        if (OperatingSystem.IsWindows()) return false;
+
+        File.SetUnixFileMode(path, UnixFileMode.None);
+        return !CanStillRead(path);
+    }
+
+    private static void RestoreAccess(string path)
+    {
+        if (OperatingSystem.IsWindows()) return;
+
+        File.SetUnixFileMode(path, UnixFileMode.UserRead | UnixFileMode.UserWrite);
     }
 
     private static bool CanStillRead(string path)
