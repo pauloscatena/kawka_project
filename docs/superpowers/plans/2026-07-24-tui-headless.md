@@ -16,7 +16,7 @@
 - `Skat.KawkaProject.Tui` referencia **somente** `Skat.KawkaProject.Core` e `Skat.KawkaProject.Kafka`. Nunca `Features.*` nem `UI`.
 - Nenhum projeto existente ganha referência nova. `Spectre.Console` só entra no projeto TUI e no seu projeto de testes.
 - Composição por `Microsoft.Extensions.DependencyInjection`, espelhando `Skat.KawkaProject.UI/App.axaml.cs:32-39`: `IConnectionProfileRepository` e `IKafkaConnectionFactory` como singleton, `ITopicService`/`IMessageService`/`IClusterService` como transient.
-- Nenhuma classe fora de `Rendering/`, `Input/` e `Safety/` pode referenciar `System.Console` ou `AnsiConsole`. Comandos devolvem `CommandResult`.
+- Nenhuma classe fora de `Rendering/`, `Input/` e `Safety/` pode referenciar `System.Console` ou `AnsiConsole`. Comandos devolvem `CommandResult`. **Exceção declarada:** `Program.cs`, o composition root — ele decide TTY e monta os writers antes de qualquer outra coisa existir, e registra o handler de Ctrl+C. Confirmado no gate da Task 6 como exceção legítima, não violação.
 - Todos os comandos rodados a partir de `/mnt/d/dev/Skat/kawka_project/src`.
 - **Sequenciamento:** as Fases 1-3 não têm dependência externa. A **Fase 4 exige que as Tasks 1-4 e a Task 9 do plano `2026-07-24-topic-recreate-hardening.md` estejam concluídas.** Tasks 1-4 entregam a validação no serviço e a `TopicRecreateFailedException`; a Task 9 entrega os renames (`DeleteAndRecreateTopicAsync`, `GetTopicConfigOverridesAsync`) que o código da Fase 4 chama pelo nome. Na prática, concluir as Fases 1-3 do plano de hardening cobre tudo isso. Não comece a Fase 4 antes.
 
@@ -112,7 +112,7 @@ Ao fim desta fase a ferramenta já é útil por SSH: conecta, lista e descreve t
 - Consumes: nada.
 - Produces: `CommandResult` (`Table`/`Pairs`/`Text`/`Failure`), `ParsedCommand(string Verb, IReadOnlyList<string> Args, IReadOnlyDictionary<string,string?> Flags)`, `ArgumentParser.ParseLine(string)`, `ArgumentParser.ParseArgv(IReadOnlyList<string>)`, `ExitCodes`. Todas as tasks seguintes consomem estes tipos.
 
-- [ ] **Step 1: Criar os dois projetos e registrá-los na solution**
+- [x] **Step 1: Criar os dois projetos e registrá-los na solution**
 
 ```bash
 cd /mnt/d/dev/Skat/kawka_project/src
@@ -129,7 +129,7 @@ dotnet add Skat.KawkaProject.Tui.Tests package Spectre.Console --version 0.57.2
 rm Skat.KawkaProject.Tui/Program.cs
 ```
 
-- [ ] **Step 2: Escrever o teste que falha**
+- [x] **Step 2: Escrever o teste que falha**
 
 Criar `Skat.KawkaProject.Tui.Tests/ArgumentParserTests.cs`:
 
@@ -177,12 +177,12 @@ public class ArgumentParserTests
 }
 ```
 
-- [ ] **Step 3: Rodar o teste para confirmar que falha**
+- [x] **Step 3: Rodar o teste para confirmar que falha**
 
 Run: `dotnet test Skat.KawkaProject.Tui.Tests`
 Expected: FAIL com erro de compilação — `ArgumentParser` não existe.
 
-- [ ] **Step 4: Implementar os tipos base**
+- [x] **Step 4: Implementar os tipos base**
 
 `Skat.KawkaProject.Tui/ExitCodes.cs`:
 
@@ -299,12 +299,12 @@ public static class ArgumentParser
 }
 ```
 
-- [ ] **Step 5: Rodar os testes para confirmar que passam**
+- [x] **Step 5: Rodar os testes para confirmar que passam**
 
 Run: `dotnet test Skat.KawkaProject.Tui.Tests`
 Expected: PASS, 4 testes.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add Skat.KawkaProject.Tui Skat.KawkaProject.Tui.Tests Skat.KawkaProject.sln
@@ -325,7 +325,7 @@ git commit -m "feat(tui): scaffold TUI project with command result types and arg
 - Consumes: `CommandResult` (Task 1).
 - Produces: `IResultRenderer.Render(CommandResult)`. `SpectreRenderer(IAnsiConsole)` e `PlainTextRenderer(TextWriter output, TextWriter error)` — ambos injetáveis para teste.
 
-- [ ] **Step 1: Escrever o teste que falha**
+- [x] **Step 1: Escrever o teste que falha**
 
 Criar `Skat.KawkaProject.Tui.Tests/RendererTests.cs`:
 
@@ -393,12 +393,12 @@ public class RendererTests
 }
 ```
 
-- [ ] **Step 2: Rodar o teste para confirmar que falha**
+- [x] **Step 2: Rodar o teste para confirmar que falha**
 
 Run: `dotnet test Skat.KawkaProject.Tui.Tests --filter "FullyQualifiedName~RendererTests"`
 Expected: FAIL com erro de compilação.
 
-- [ ] **Step 3: Implementar os renderers**
+- [x] **Step 3: Implementar os renderers**
 
 `Skat.KawkaProject.Tui/Rendering/IResultRenderer.cs`:
 
@@ -498,12 +498,12 @@ public sealed class SpectreRenderer(IAnsiConsole console) : IResultRenderer
 }
 ```
 
-- [ ] **Step 4: Rodar os testes**
+- [x] **Step 4: Rodar os testes**
 
 Run: `dotnet test Skat.KawkaProject.Tui.Tests`
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add Skat.KawkaProject.Tui/Rendering Skat.KawkaProject.Tui.Tests/RendererTests.cs
@@ -513,6 +513,15 @@ git commit -m "feat(tui): add Spectre and plain-text result renderers"
 ---
 
 ### Task 3: Contrato de comando, registry e dispatcher
+
+> **Achado do gate da Task 1, a honrar aqui:** o `ArgumentParser` normaliza o nome das flags
+> (`StringComparer.OrdinalIgnoreCase`) mas **não** o verbo — `ParseLine("TOPICS")` devolve
+> `Verb == "TOPICS"` cru. O lookup verbo→handler do `CommandRegistry` PRECISA ser
+> `OrdinalIgnoreCase`, senão `TOPICS` vira "comando desconhecido" enquanto `--OUTPUT` funciona,
+> uma assimetria que ninguém consegue adivinhar. Confirme também que o dispatcher captura
+> `Exception` e não apenas tipos específicos: `ParsedCommand.IntFlag` lança `FormatException` para
+> valor não numérico, e hoje não há ninguém entre ele e o topo do REPL.
+
 
 O dispatcher é a **única** fronteira que captura `Exception`. É isso que impede cada comando de inventar seu próprio formato de mensagem de erro.
 
@@ -524,7 +533,7 @@ O dispatcher é a **única** fronteira que captura `Exception`. É isso que impe
 - Consumes: `ParsedCommand`, `CommandResult`, `ExitCodes` (Task 1).
 - Produces: `ITuiCommand`, `CommandContext`, `CommandRegistry.Resolve(string)`, `CommandRegistry.All`, `CommandDispatcher.DispatchAsync(ParsedCommand, IKafkaSession?, IConfirmer, CancellationToken)`. Todas as tasks de comando implementam `ITuiCommand`.
 
-- [ ] **Step 1: Escrever o teste que falha**
+- [x] **Step 1: Escrever o teste que falha**
 
 Criar `Skat.KawkaProject.Tui.Tests/DispatcherTests.cs`:
 
@@ -617,12 +626,12 @@ public class DispatcherTests
 }
 ```
 
-- [ ] **Step 2: Rodar o teste para confirmar que falha**
+- [x] **Step 2: Rodar o teste para confirmar que falha**
 
 Run: `dotnet test Skat.KawkaProject.Tui.Tests --filter "FullyQualifiedName~DispatcherTests"`
 Expected: FAIL com erro de compilação.
 
-- [ ] **Step 3: Implementar contrato, registry e dispatcher**
+- [x] **Step 3: Implementar contrato, registry e dispatcher**
 
 `Skat.KawkaProject.Tui/Commands/ITuiCommand.cs`:
 
@@ -748,12 +757,12 @@ public interface IConfirmer
 }
 ```
 
-- [ ] **Step 4: Rodar os testes**
+- [x] **Step 4: Rodar os testes**
 
 Run: `dotnet test Skat.KawkaProject.Tui.Tests`
 Expected: PASS, 5 testes novos.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add Skat.KawkaProject.Tui/Commands Skat.KawkaProject.Tui/Safety Skat.KawkaProject.Tui.Tests/DispatcherTests.cs
@@ -772,7 +781,7 @@ git commit -m "feat(tui): add command contract, registry and single-boundary dis
 - Consumes: `ITuiCommand`, `CommandContext`, `CommandResult` (Task 3); `IConnectionProfileRepository.GetAll()`, `IKafkaConnectionFactory.ConnectAsync(ConnectionProfile)`.
 - Produces: `ProfilesCommand`, `ConnectCommand`, `DisconnectCommand`, `StatusCommand`. `ConnectCommand` expõe `IKafkaSession? Established` para o `TuiHost` capturar a sessão criada.
 
-- [ ] **Step 1: Escrever o teste que falha**
+- [x] **Step 1: Escrever o teste que falha**
 
 Criar `Skat.KawkaProject.Tui.Tests/ConnectionCommandsTests.cs`:
 
@@ -870,12 +879,12 @@ public class ConnectionCommandsTests
 }
 ```
 
-- [ ] **Step 2: Rodar o teste para confirmar que falha**
+- [x] **Step 2: Rodar o teste para confirmar que falha**
 
 Run: `dotnet test Skat.KawkaProject.Tui.Tests --filter "FullyQualifiedName~ConnectionCommandsTests"`
 Expected: FAIL com erro de compilação.
 
-- [ ] **Step 3: Implementar os comandos**
+- [x] **Step 3: Implementar os comandos**
 
 Criar `Skat.KawkaProject.Tui/Commands/ConnectionCommands.cs`:
 
@@ -961,12 +970,12 @@ public sealed class StatusCommand : ITuiCommand
 
 Nota de implementação: `DisconnectCommand` só reporta; quem descarta a sessão é o `TuiHost` (Task 6), porque o ciclo de vida da sessão pertence ao host, não ao comando.
 
-- [ ] **Step 4: Rodar os testes**
+- [x] **Step 4: Rodar os testes**
 
 Run: `dotnet test Skat.KawkaProject.Tui.Tests`
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add Skat.KawkaProject.Tui/Commands/ConnectionCommands.cs Skat.KawkaProject.Tui.Tests/ConnectionCommandsTests.cs
@@ -976,6 +985,18 @@ git commit -m "feat(tui): add profiles, connect, disconnect and status commands"
 ---
 
 ### Task 5: Comandos de leitura de tópicos
+
+> **Achado do gate da Task 2, a honrar aqui:** o `DescribeCommand` desenhado abaixo carrega os
+> **config overrides do tópico dentro do `Title`** da `Table`, com o comentário de que "os overrides
+> viajam no título para um único resultado carregar os dois fatos". Isso perde a informação em modo
+> pipe: o `PlainTextRenderer` descarta títulos de propósito (são decoração, e um pipeline
+> `describe orders | cut -f1` não deve ter de saber pular uma linha). Resultado: `describe` por pipe
+> mostraria as partições e **omitiria os overrides em silêncio**.
+>
+> Corrija na implementação: o título fica para decoração, e os config overrides saem como dado de
+> verdade — uma `Pairs` adicional, ou linhas próprias na tabela. A regra geral, já documentada no
+> `PlainTextRenderer`: **se um fato importa, ele vai numa coluna ou num par, nunca num título.**
+
 
 **Files:**
 - Create: `Skat.KawkaProject.Tui/Commands/TopicCommands.cs`
@@ -987,7 +1008,7 @@ git commit -m "feat(tui): add profiles, connect, disconnect and status commands"
 
 > **Nota:** `GetTopicConfigOverridesAsync` é o nome pós-Task 2 do plano de hardening. Se a Fase 1 da TUI for feita antes daquele rename, use `GetTopicConfigAsync` e ajuste ao renomear.
 
-- [ ] **Step 1: Escrever o teste que falha**
+- [x] **Step 1: Escrever o teste que falha**
 
 Criar `Skat.KawkaProject.Tui.Tests/TopicCommandsTests.cs`:
 
@@ -1076,12 +1097,12 @@ public class TopicCommandsTests
 }
 ```
 
-- [ ] **Step 2: Rodar o teste para confirmar que falha**
+- [x] **Step 2: Rodar o teste para confirmar que falha**
 
 Run: `dotnet test Skat.KawkaProject.Tui.Tests --filter "FullyQualifiedName~TopicCommandsTests"`
 Expected: FAIL com erro de compilação.
 
-- [ ] **Step 3: Implementar os comandos**
+- [x] **Step 3: Implementar os comandos**
 
 Criar `Skat.KawkaProject.Tui/Commands/TopicCommands.cs`:
 
@@ -1159,12 +1180,12 @@ public sealed class DescribeCommand(ITopicService topics) : ITuiCommand
 }
 ```
 
-- [ ] **Step 4: Rodar os testes**
+- [x] **Step 4: Rodar os testes**
 
 Run: `dotnet test Skat.KawkaProject.Tui.Tests`
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add Skat.KawkaProject.Tui/Commands/TopicCommands.cs Skat.KawkaProject.Tui.Tests/TopicCommandsTests.cs
@@ -1174,6 +1195,26 @@ git commit -m "feat(tui): add topics and describe commands"
 ---
 
 ### Task 6: `Program`, `TuiHost` e o comando `help`
+
+> **Achado do gate da Task 3, a honrar aqui:** `CommandRegistry.All` devolve `_byName.Values`, ou
+> seja, a ordem de inserção do dicionário — que é a ordem de registro no composition root, arbitrária
+> do ponto de vista de quem lê a ajuda (e nem sequer é contrato documentado do `Dictionary`). O
+> `HelpCommand` deve **ordenar explicitamente por `Name`** ao renderizar, em vez de confiar em `All`.
+>
+> **Achados do gate da Task 4, a validar aqui:**
+> 1. **`disconnect` hoje mente.** O comando devolve "Disconnected from 'x'." mas nada encerra a
+>    sessão — quem faz isso é o `HandleDisconnect` desta task. Se ele não for implementado, o
+>    usuário lê "Disconnected" e segue conectado.
+> 2. **Trocar de sessão sem descartar a anterior.** `connect prod` seguido de `connect staging`
+>    deixa a primeira `IKafkaSession` para trás. Hoje isso não vaza recurso — `KafkaSession.Dispose()`
+>    é no-op e nenhum handle nativo é retido, porque `TopicService` e companhia abrem e descartam o
+>    próprio `AdminClient` a cada chamada. Vira leak de verdade no dia em que a sessão passar a
+>    reter um client. `AdoptSessionIfConnected` deve descartar a anterior de qualquer forma.
+> 3. **`ConnectCommand` é singleton e guarda `Established`.** Funciona porque o REPL é sequencial:
+>    o host lê `.Established` logo após o `await` do dispatch. Se alguma coisa passar a despachar
+>    comandos em paralelo, isso vira corrida — a restrição precisa estar escrita, não implícita.
+
+
 
 Fecha a Fase 1: a ferramenta passa a rodar de verdade, nos dois modos. O REPL usa `Console.ReadLine()` por enquanto — a caixa com borda vem na Fase 2.
 
@@ -1185,7 +1226,7 @@ Fecha a Fase 1: a ferramenta passa a rodar de verdade, nos dois modos. O REPL us
 - Consumes: tudo das Tasks 1-5.
 - Produces: `TuiHost.RunReplAsync(CancellationToken)`, `TuiHost.RunOnceAsync(ParsedCommand, CancellationToken)`, `HelpCommand`.
 
-- [ ] **Step 1: Escrever o teste do help**
+- [x] **Step 1: Escrever o teste do help**
 
 Criar `Skat.KawkaProject.Tui.Tests/HelpCommandTests.cs`:
 
@@ -1250,12 +1291,12 @@ public class HelpCommandTests
 }
 ```
 
-- [ ] **Step 2: Rodar o teste para confirmar que falha**
+- [x] **Step 2: Rodar o teste para confirmar que falha**
 
 Run: `dotnet test Skat.KawkaProject.Tui.Tests --filter "FullyQualifiedName~HelpCommandTests"`
 Expected: FAIL com erro de compilação.
 
-- [ ] **Step 3: Implementar `HelpCommand`**
+- [x] **Step 3: Implementar `HelpCommand`**
 
 Criar `Skat.KawkaProject.Tui/Commands/HelpCommand.cs`:
 
@@ -1291,7 +1332,7 @@ public sealed class HelpCommand(CommandRegistry registry) : ITuiCommand
 }
 ```
 
-- [ ] **Step 4: Implementar `TuiHost`**
+- [x] **Step 4: Implementar `TuiHost`**
 
 Criar `Skat.KawkaProject.Tui/TuiHost.cs`:
 
@@ -1394,7 +1435,7 @@ public sealed class TuiHost(
 }
 ```
 
-- [ ] **Step 5: Implementar `Program`**
+- [x] **Step 5: Implementar `Program`**
 
 Criar `Skat.KawkaProject.Tui/Program.cs`:
 
@@ -1478,7 +1519,7 @@ file sealed class NotYetImplementedConfirmer : IConfirmer
 }
 ```
 
-- [ ] **Step 6: Verificar build, testes e execução real**
+- [x] **Step 6: Verificar build, testes e execução real**
 
 ```bash
 dotnet build && dotnet test Skat.KawkaProject.Tui.Tests
@@ -1487,7 +1528,7 @@ dotnet run --project Skat.KawkaProject.Tui -- help | cat        # sem TTY: deve 
 ```
 Expected: build limpo; testes verdes; `help` lista os comandos; a versão com `| cat` sai sem bordas nem ANSI.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add Skat.KawkaProject.Tui Skat.KawkaProject.Tui.Tests
@@ -1495,6 +1536,14 @@ git commit -m "feat(tui): add help command, REPL host and one-shot entry point"
 ```
 
 ---
+
+> **Dívida aberta pelo gate da Task 6, a considerar antes de construir em cima:** o Ctrl+C do prompt
+> ocioso funciona (verificado em pty real), mas **cancelar um comando em andamento não interrompe a
+> chamada de rede**. Nenhum método de `ITopicService`/`IKafkaConnectionFactory`/`IMessageService`
+> aceita `CancellationToken`, então o token é marcado e ignorado até o librdkafka estourar o próprio
+> timeout. A Fase 2 constrói a caixa de prompt sobre esse mesmo mecanismo — se quisermos que Ctrl+C
+> seja saída de um broker travado, o token precisa descer até o `Core`, o que é mudança de contrato
+> fora do escopo desta TUI.
 
 # FASE 2 — Caixa de prompt
 
@@ -1509,7 +1558,7 @@ Isolada de propósito: é a parte mais trabalhosa e a de menor risco funcional. 
 **Interfaces:**
 - Produces: `IKeySource.ReadKey()`, `LineHistory.Add(string)`, `LineHistory.Previous()`, `LineHistory.Next()`, `LineHistory.ResetCursor()`, `LineHistory.Load(string path)`, `LineHistory.Save(string path)`. Task 8 consome ambos.
 
-- [ ] **Step 1: Escrever o teste que falha**
+- [x] **Step 1: Escrever o teste que falha**
 
 Criar `Skat.KawkaProject.Tui.Tests/LineHistoryTests.cs`:
 
@@ -1573,12 +1622,12 @@ public class LineHistoryTests
 }
 ```
 
-- [ ] **Step 2: Rodar o teste para confirmar que falha**
+- [x] **Step 2: Rodar o teste para confirmar que falha**
 
 Run: `dotnet test Skat.KawkaProject.Tui.Tests --filter "FullyQualifiedName~LineHistoryTests"`
 Expected: FAIL com erro de compilação.
 
-- [ ] **Step 3: Implementar**
+- [x] **Step 3: Implementar**
 
 `Skat.KawkaProject.Tui/Input/IKeySource.cs`:
 
@@ -1651,12 +1700,12 @@ public sealed class LineHistory
 }
 ```
 
-- [ ] **Step 4: Rodar os testes**
+- [x] **Step 4: Rodar os testes**
 
 Run: `dotnet test Skat.KawkaProject.Tui.Tests`
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add Skat.KawkaProject.Tui/Input Skat.KawkaProject.Tui.Tests/LineHistoryTests.cs
@@ -1667,6 +1716,23 @@ git commit -m "feat(tui): add key source abstraction and command history"
 
 ### Task 8: `PromptReader` e integração no host
 
+> **Achado do gate da Task 7, BLOQUEANTE para esta task:** `Console.ReadKey(intercept: true)` lança
+> `InvalidOperationException` quando stdin está redirecionado ("Cannot read keys when either
+> application does not have a console or when console input has been redirected"). O rascunho abaixo
+> registra `IKeySource`/`PromptReader` **incondicionalmente** — isso quebra o REPL por pipe, que
+> funciona hoje via `ConsoleLineReader` e é como a ferramenta vem sendo testada
+> (`printf 'topics\nexit\n' | kawka`).
+>
+> Na implementação: escolher o leitor por `Console.IsInputRedirected`, com fallback para
+> `ConsoleLineReader`, seguindo o mesmo padrão de detecção que o `Program.cs` já usa para o renderer.
+> A caixa com borda é conforto de terminal interativo; sem terminal, ler linha a linha continua sendo
+> o comportamento certo.
+>
+> **Também do mesmo gate:** `LineHistory.Load`/`Save` agora devolvem `bool`. Use isso para avisar o
+> usuário quando o histórico não puder ser lido ou gravado — sem esse sinal ele não distingue
+> "ainda não há histórico" de "seu arquivo está ilegível", e não tem onde olhar.
+
+
 **Files:**
 - Create: `Skat.KawkaProject.Tui/Input/PromptReader.cs`
 - Modify: `Skat.KawkaProject.Tui/TuiHost.cs`, `Skat.KawkaProject.Tui/Program.cs`
@@ -1676,7 +1742,7 @@ git commit -m "feat(tui): add key source abstraction and command history"
 - Consumes: `IKeySource`, `LineHistory` (Task 7).
 - Produces: `PromptReader(IKeySource keys, LineHistory history, IAnsiConsole console)` com `string? ReadLine()` — devolve `null` em Ctrl+D numa linha vazia.
 
-- [ ] **Step 1: Escrever o teste que falha**
+- [x] **Step 1: Escrever o teste que falha**
 
 Criar `Skat.KawkaProject.Tui.Tests/PromptReaderTests.cs`:
 
@@ -1755,12 +1821,12 @@ public class PromptReaderTests
 }
 ```
 
-- [ ] **Step 2: Rodar o teste para confirmar que falha**
+- [x] **Step 2: Rodar o teste para confirmar que falha**
 
 Run: `dotnet test Skat.KawkaProject.Tui.Tests --filter "FullyQualifiedName~PromptReaderTests"`
 Expected: FAIL com erro de compilação.
 
-- [ ] **Step 3: Implementar `PromptReader`**
+- [x] **Step 3: Implementar `PromptReader`**
 
 Criar `Skat.KawkaProject.Tui/Input/PromptReader.cs`:
 
@@ -1843,7 +1909,7 @@ public sealed class PromptReader(IKeySource keys, LineHistory history, IAnsiCons
 }
 ```
 
-- [ ] **Step 4: Ligar o `PromptReader` ao host**
+- [x] **Step 4: Ligar o `PromptReader` ao host**
 
 Em `Skat.KawkaProject.Tui/TuiHost.cs`, adicionar `PromptReader? promptReader = null` como último parâmetro do construtor primário e substituir as duas linhas de leitura em `RunReplAsync`:
 
@@ -1884,7 +1950,7 @@ services.AddSingleton<TuiHost>(sp => new TuiHost(
     wantsPlain ? null : sp.GetRequiredService<PromptReader>()));
 ```
 
-- [ ] **Step 5: Rodar testes e verificar manualmente**
+- [x] **Step 5: Rodar testes e verificar manualmente**
 
 ```bash
 dotnet build && dotnet test Skat.KawkaProject.Tui.Tests
@@ -1892,7 +1958,7 @@ dotnet run --project Skat.KawkaProject.Tui
 ```
 Expected: testes verdes; o REPL abre com a caixa com borda; digitar `help` e Enter funciona; seta pra cima recupera o comando anterior; Ctrl+D sai.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add Skat.KawkaProject.Tui Skat.KawkaProject.Tui.Tests/PromptReaderTests.cs
@@ -1914,7 +1980,7 @@ git commit -m "feat(tui): add bordered prompt box with history and inline editin
 - Consumes: `IClusterService.ListBrokersAsync`, `ListConsumerGroupsAsync`, `GetGroupLagAsync`.
 - Produces: `BrokersCommand`, `GroupsCommand`, `LagCommand`.
 
-- [ ] **Step 1: Escrever o teste que falha**
+- [x] **Step 1: Escrever o teste que falha**
 
 Criar `Skat.KawkaProject.Tui.Tests/ClusterCommandsTests.cs`:
 
@@ -1984,12 +2050,12 @@ public class ClusterCommandsTests
 }
 ```
 
-- [ ] **Step 2: Rodar o teste para confirmar que falha**
+- [x] **Step 2: Rodar o teste para confirmar que falha**
 
 Run: `dotnet test Skat.KawkaProject.Tui.Tests --filter "FullyQualifiedName~ClusterCommandsTests"`
 Expected: FAIL com erro de compilação.
 
-- [ ] **Step 3: Implementar**
+- [x] **Step 3: Implementar**
 
 Criar `Skat.KawkaProject.Tui/Commands/ClusterCommands.cs`:
 
@@ -2076,12 +2142,12 @@ services.AddSingleton<ITuiCommand, GroupsCommand>();
 services.AddSingleton<ITuiCommand, LagCommand>();
 ```
 
-- [ ] **Step 4: Rodar os testes**
+- [x] **Step 4: Rodar os testes**
 
 Run: `dotnet build && dotnet test Skat.KawkaProject.Tui.Tests`
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add Skat.KawkaProject.Tui Skat.KawkaProject.Tui.Tests/ClusterCommandsTests.cs
@@ -2103,7 +2169,7 @@ git commit -m "feat(tui): add brokers, groups and lag commands"
 
 > **`produce` não tem `--partition`:** `IMessageService.ProduceAsync` não aceita partição. Não invente a flag.
 
-- [ ] **Step 1: Escrever o teste que falha**
+- [x] **Step 1: Escrever o teste que falha**
 
 Criar `Skat.KawkaProject.Tui.Tests/MessageCommandsTests.cs`:
 
@@ -2202,12 +2268,12 @@ public class MessageCommandsTests
 }
 ```
 
-- [ ] **Step 2: Rodar o teste para confirmar que falha**
+- [x] **Step 2: Rodar o teste para confirmar que falha**
 
 Run: `dotnet test Skat.KawkaProject.Tui.Tests --filter "FullyQualifiedName~MessageCommandsTests"`
 Expected: FAIL com erro de compilação.
 
-- [ ] **Step 3: Implementar**
+- [x] **Step 3: Implementar**
 
 Criar `Skat.KawkaProject.Tui/Commands/MessageCommands.cs`:
 
@@ -2306,12 +2372,12 @@ services.AddSingleton<ITuiCommand, ConsumeCommand>();
 services.AddSingleton<ITuiCommand, ProduceCommand>();
 ```
 
-- [ ] **Step 4: Rodar os testes**
+- [x] **Step 4: Rodar os testes**
 
 Run: `dotnet build && dotnet test Skat.KawkaProject.Tui.Tests`
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add Skat.KawkaProject.Tui Skat.KawkaProject.Tui.Tests/MessageCommandsTests.cs
@@ -2339,7 +2405,7 @@ Os testes desta task são os mais importantes do projeto: são eles que garantem
 - Consumes: `IConfirmer`, `DestructiveAction` (Task 3).
 - Produces: `InteractiveConfirmer(IAnsiConsole console, Func<string?> readLine)`, `NonInteractiveConfirmer(bool acknowledged, IAnsiConsole console)`.
 
-- [ ] **Step 1: Escrever os testes que falham**
+- [x] **Step 1: Escrever os testes que falham**
 
 Criar `Skat.KawkaProject.Tui.Tests/ConfirmerTests.cs`:
 
@@ -2400,12 +2466,12 @@ public class ConfirmerTests
 }
 ```
 
-- [ ] **Step 2: Rodar os testes para confirmar que falham**
+- [x] **Step 2: Rodar os testes para confirmar que falham**
 
 Run: `dotnet test Skat.KawkaProject.Tui.Tests --filter "FullyQualifiedName~ConfirmerTests"`
 Expected: FAIL com erro de compilação.
 
-- [ ] **Step 3: Implementar os confirmadores**
+- [x] **Step 3: Implementar os confirmadores**
 
 `Skat.KawkaProject.Tui/Safety/InteractiveConfirmer.cs`:
 
@@ -2486,17 +2552,24 @@ public sealed class NonInteractiveConfirmer(bool acknowledged, IAnsiConsole cons
 Em `Program.cs`, remover `NotYetImplementedConfirmer` e substituir o registro por:
 
 ```csharp
-services.AddSingleton<IConfirmer>(_ => oneShot || wantsPlain
-    ? new NonInteractiveConfirmer(parsed.HasFlag(NonInteractiveConfirmer.AcknowledgeFlag), AnsiConsole.Console)
-    : new InteractiveConfirmer(AnsiConsole.Console, Console.ReadLine));
+services.AddSingleton<IConfirmer>(_ => ConfirmerChoice.WantsInteractive(oneShot, Console.IsInputRedirected)
+    ? new InteractiveConfirmer(AnsiConsole.Console, Console.ReadLine)
+    : new NonInteractiveConfirmer(parsed.HasFlag(NonInteractiveConfirmer.AcknowledgeFlag), AnsiConsole.Console));
 ```
 
-- [ ] **Step 4: Rodar os testes**
+- [x] **Step 4: Rodar os testes**
 
 Run: `dotnet build && dotnet test Skat.KawkaProject.Tui.Tests`
 Expected: PASS, 7 casos novos (o `Theory` contribui 4).
 
-- [ ] **Step 5: Commit**
+> **Corrigido na execução (gate da Task 11):** o registro usa `Console.IsInputRedirected`, não
+> `wantsPlain` — este decide renderização, aquele decide se existe alguém para responder. Um operador
+> ao teclado com stdout redirecionado a um arquivo caía em `NonInteractiveConfirmer` pela regra
+> original, e teria toda operação destrutiva recusada em silêncio. A decisão foi extraída para
+> `Safety/ConfirmerChoice.cs` para poder ser testada; enquanto vivia dentro do lambda de registro,
+> o ponto mais crítico do projeto não tinha cobertura nenhuma.
+
+- [x] **Step 5: Commit**
 
 ```bash
 git add Skat.KawkaProject.Tui/Safety Skat.KawkaProject.Tui.Tests/ConfirmerTests.cs Skat.KawkaProject.Tui/Program.cs
@@ -2516,7 +2589,7 @@ git commit -m "feat(tui): add interactive and non-interactive destructive-action
 - Consumes: `ITopicService.CreateTopicAsync`, `DeleteTopicAsync`, `ExpandPartitionsAsync`, `DeleteAndRecreateTopicAsync` (nome pós-hardening Task 9); `TopicRecreateFailedException` (hardening Task 4); `IConfirmer` (Task 11).
 - Produces: `CreateCommand`, `DeleteCommand`, `IncreaseCommand`, `RecreateCommand`.
 
-- [ ] **Step 1: Escrever os testes que falham**
+- [x] **Step 1: Escrever os testes que falham**
 
 Criar `Skat.KawkaProject.Tui.Tests/TopicAdminCommandsTests.cs`:
 
@@ -2630,12 +2703,12 @@ public class TopicAdminCommandsTests
 }
 ```
 
-- [ ] **Step 2: Rodar os testes para confirmar que falham**
+- [x] **Step 2: Rodar os testes para confirmar que falham**
 
 Run: `dotnet test Skat.KawkaProject.Tui.Tests --filter "FullyQualifiedName~TopicAdminCommandsTests"`
 Expected: FAIL com erro de compilação.
 
-- [ ] **Step 3: Implementar**
+- [x] **Step 3: Implementar**
 
 Criar `Skat.KawkaProject.Tui/Commands/TopicAdminCommands.cs`:
 
@@ -2792,12 +2865,12 @@ services.AddSingleton<ITuiCommand, IncreaseCommand>();
 services.AddSingleton<ITuiCommand, RecreateCommand>();
 ```
 
-- [ ] **Step 4: Rodar a suíte completa**
+- [x] **Step 4: Rodar a suíte completa**
 
 Run: `dotnet build && dotnet test`
 Expected: PASS, incluindo as suítes existentes de `Features.Tests`, `Kafka.Tests` e `Core.Tests`.
 
-- [ ] **Step 5: Verificar a recusa não-interativa de verdade**
+- [x] **Step 5: Verificar a recusa não-interativa de verdade**
 
 ```bash
 cd /mnt/d/dev/Skat/kawka_project/src
@@ -2805,7 +2878,7 @@ dotnet run --project Skat.KawkaProject.Tui -- delete some-topic --profile local;
 ```
 Expected: recusa, mensagem citando `--yes-i-know-this-deletes-data`, `exit=3`. **Se isto retornar 0 ou deletar o tópico, pare e corrija antes de commitar** — é a garantia central desta fase.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add Skat.KawkaProject.Tui Skat.KawkaProject.Tui.Tests/TopicAdminCommandsTests.cs
@@ -2816,13 +2889,18 @@ git commit -m "feat(tui): add create, delete, increase and recreate commands beh
 
 ## Verificação final
 
-- [ ] `dotnet build` → `0 Error(s)`
-- [ ] `dotnet test` → todas as suítes verdes (Docker rodando para as de integração)
-- [ ] `dotnet run --project Skat.KawkaProject.Tui` → REPL abre com a caixa; `help`, `profiles`, `connect`, `topics`, `describe` funcionam
-- [ ] `dotnet run --project Skat.KawkaProject.Tui -- topics --profile local | cat` → saída TSV, sem ANSI, sem bordas
-- [ ] `dotnet run --project Skat.KawkaProject.Tui -- delete x --profile local` → recusa com exit 3
-- [ ] Nenhum arquivo fora de `Rendering/`, `Input/` e `Safety/` referencia `Console` ou `AnsiConsole`:
+- [x] `dotnet build` → `0 Error(s)`
+- [x] `dotnet test` → todas as suítes verdes (Docker rodando para as de integração)
+- [x] `dotnet run --project Skat.KawkaProject.Tui` → REPL abre com a caixa; `help`, `profiles`, `connect`, `topics`, `describe` funcionam
+- [x] `dotnet run --project Skat.KawkaProject.Tui -- topics --profile local | cat` → saída TSV, sem ANSI, sem bordas
+- [x] `dotnet run --project Skat.KawkaProject.Tui -- delete x --profile local` → recusa com exit 3
+- [x] Nenhum arquivo fora de `Rendering/`, `Input/` e `Safety/` referencia `Console` ou `AnsiConsole`:
       `grep -rn "AnsiConsole\|System.Console\|Console\." Skat.KawkaProject.Tui/Commands/` deve retornar vazio
+
+> **Nota sobre o item do REPL:** ele abre e os comandos funcionam (verificado em pty real), mas
+> **sem a caixa com borda**. O redesenho por painel empilhava uma caixa por tecla digitada, porque
+> um painel não pode ser apagado sem controle de cursor multi-linha; a Task 8 entregou redesenho de
+> linha única no lugar. Ver o commit `a944e6a`.
 
 ## Revisão final do projeto
 
